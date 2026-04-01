@@ -41,6 +41,161 @@ Tools for building AI agents and managing LLM deployments.
 | **[@mariozechner/pi-web-ui](packages/web-ui)** | Web components for AI chat interfaces |
 | **[@mariozechner/pi-pods](packages/pods)** | CLI for managing vLLM deployments on GPU pods |
 
+## LinkPi – OpenCode (VS Code) Bridge
+
+[`LinkPi.py`](LinkPi.py) is a Python middleware that exposes pi's agent as an OpenAI-compatible HTTP API, allowing [OpenCode](https://opencode.ai) (VS Code extension) to use pi as its coding agent backend.
+
+Each LLM provider gets its own persistent pi session and session directory. Switching providers in OpenCode's model selector automatically compacts the outgoing session, extracts a handoff summary, and injects it as context into the incoming provider's session. A `/v1/consolidate` endpoint asks pi itself to synthesise all provider summaries into a single unified memory document.
+
+### Architecture
+
+```
+OpenCode (VS Code)
+  POST /v1/chat/completions
+  model: "link-pi/<provider>"   ← provider encoded in model name
+          │
+          ▼
+  LinkPi.py  (FastAPI, port 8765)
+    │
+    ├── ProviderRegistry
+    │     one PiProcess per provider, each with its own session directory
+    │     detects provider switch → compact outgoing → update SharedMemory
+    │
+    ├── SharedMemory  (~/.linkpi/memory.md)
+    │     cross-provider context injected at the start of every new session
+    │
+    └── /v1/consolidate
+          spawns a fresh pi session, feeds it all summaries,
+          asks it to produce one unified memory document
+    │
+    │  JSONL over stdin/stdout  (pi RPC protocol)
+    ▼
+  pi --mode rpc  (one subprocess per provider)
+    │  --session-dir ~/.linkpi/sessions/<provider>/
+    ▼
+  LLM provider  (Anthropic / OpenAI / Google / …)
+```
+
+### Memory flow
+
+```
+User switches from Anthropic → OpenAI in OpenCode model selector
+  1. LinkPi compacts the Anthropic pi session
+  2. Pi returns a handoff summary (plain text)
+  3. Summary appended to ~/.linkpi/memory.md
+  4. OpenAI pi session starts; shared memory is prepended
+     to the first user message as a [Context] block
+  5. OpenAI continues work with full awareness of what Anthropic did
+
+POST /v1/consolidate
+  Spawns a temporary pi session, feeds it ALL provider summaries,
+  asks it to synthesise a single unified memory document → replaces memory.md
+```
+
+### Setup
+
+```bash
+pip install fastapi uvicorn
+
+# Start bridge (defaults: 127.0.0.1:8765, pi from PATH)
+python LinkPi.py
+
+# Specify a default model or thinking level
+python LinkPi.py --model anthropic/claude-sonnet-4 --thinking medium
+
+# Custom pi executable (development)
+python LinkPi.py --pi-cmd ./pi-dev.sh
+```
+
+Place `opencode.json` next to your project (or at `~/.config/opencode/config.json` for global use):
+
+```json
+{
+  "$schema": "https://opencode.ai/config.schema.json",
+  "model": "link-pi/pi-agent",
+  "provider": {
+    "link-pi": {
+      "options": {
+        "baseURL": "http://127.0.0.1:8765/v1",
+        "apiKey":  "local"
+      },
+      "models": {
+        "pi-anthropic": { "name": "Pi \u2192 Anthropic" },
+        "pi-openai":    { "name": "Pi \u2192 OpenAI" },
+        "pi-google":    { "name": "Pi \u2192 Google" },
+        "pi-groq":      { "name": "Pi \u2192 Groq" },
+        "pi-mistral":   { "name": "Pi \u2192 Mistral" },
+        "pi-bedrock":   { "name": "Pi \u2192 Bedrock" },
+        "pi-vertex":    { "name": "Pi \u2192 Vertex" },
+        "pi-openrouter":{ "name": "Pi \u2192 OpenRouter" },
+        "pi-agent":     { "name": "Pi (default)" }
+      }
+    }
+  }
+}
+```
+
+LinkPi prints this snippet on startup.
+
+> **Why `options.baseURL` instead of top-level `baseURL`?**  
+> OpenCode's provider schema uses `.strict()` — only `name`, `npm`, `models`, `options`, `whitelist`, `blacklist` are allowed at the top level. `baseURL` and `apiKey` must be nested inside `options`. Placing them at the top level causes the `Unrecognized keys` validation error.
+
+### Available models
+
+Switch providers by changing `model` in `opencode.json`, or use OpenCode's model selector (`Ctrl+M`).
+
+| Model (`link-pi/<id>`) | Pi provider used |
+|------------------------|------------------|
+| `pi-anthropic` | `--provider anthropic` |
+| `pi-openai` | `--provider openai` |
+| `pi-google` | `--provider google` |
+| `pi-groq` | `--provider groq` |
+| `pi-mistral` | `--provider mistral` |
+| `pi-bedrock` | `--provider bedrock` |
+| `pi-vertex` | `--provider vertex` |
+| `pi-openrouter` | `--provider openrouter` |
+| `pi-local` | `local-llm` (via `~/.pi/agent/models.json`) |
+| `pi-agent` | pi chooses provider |
+
+### CLI options
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--host` | `127.0.0.1` | Bind address |
+| `--port` | `8765` | Port |
+| `--pi-cmd` | `pi` | Path to the pi executable |
+| `--model` | *(pi default)* | Default model inside pi, e.g. `anthropic/claude-sonnet-4` |
+| `--thinking` | *(pi default)* | Thinking level: `off` `minimal` `low` `medium` `high` `xhigh` |
+
+### Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v1/models` | List all `link-pi/<provider>` models |
+| `POST /v1/chat/completions` | OpenAI-compatible streaming chat |
+| `POST /v1/consolidate` | Ask pi to synthesise all provider summaries into one unified memory |
+| `GET /v1/memory` | Inspect current shared memory and snapshot count |
+
+### How it works
+
+- **One pi subprocess per provider.** Each `link-pi/<provider>` model maps to a long-lived `pi --mode rpc` process with its own `--session-dir ~/.linkpi/sessions/<provider>/`. Pi's full session persistence (branching, compaction, `/tree`) works normally within each provider.
+- **Provider switch = memory handoff.** When OpenCode switches to a different model, LinkPi compacts the outgoing session (using pi's `compact` RPC command with handoff-optimised instructions), extracts the summary, and appends it to `~/.linkpi/memory.md`.
+- **Shared memory injection.** Every new session starts with the full contents of `memory.md` prepended to the first user message as a `[Shared memory from previous sessions]` block. The new provider has complete awareness of prior work.
+- **Consolidation on demand.** `POST /v1/consolidate` spawns a temporary pi session, feeds it all accumulated provider summaries, and asks pi to synthesise them into a single coherent memory document that replaces `memory.md`.
+- **Response routing via Future.** Pi RPC command responses (e.g. the prompt ack, compact result) are routed to `asyncio.Future` objects keyed by id, separate from the streaming event queue. This lets `compact` run synchronously during a provider switch without interfering with streaming.
+- **Tool execution is visible.** Pi's autonomous `bash`, `read`, `edit` calls are streamed to OpenCode as italic annotations so the user can follow along.
+- **Auth stays with pi.** API keys and OAuth tokens are managed by pi (`~/.pi/agent/auth.json` or env vars). The `apiKey: "local"` in OpenCode's config is a placeholder.
+
+### Known limitations
+
+| Limitation | Detail |
+|------------|--------|
+| Compact requires enough context | Pi's compact command needs sufficient conversation history; very short sessions produce no summary. |
+| Provider switch blocks the next request | The first request after a switch waits for the outgoing session to compact before proceeding. |
+| Tool calls are opaque to OpenCode | OpenCode sees plain text, not structured `tool_call`/`tool_result` blocks. |
+| One request at a time per provider | Concurrent requests to the same provider are serialised via `asyncio.Lock`. |
+| Windows subprocess | Requires pi to be on `PATH`; adjust `--pi-cmd` if needed. |
+
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for contribution guidelines and [AGENTS.md](AGENTS.md) for project-specific rules (for both humans and agents).
