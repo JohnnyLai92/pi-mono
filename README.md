@@ -23,6 +23,10 @@ OSS weekend runs Friday, March 27, 2026 through Monday, April 6, 2026. New issue
   <a href="https://exe.dev"><img src="packages/coding-agent/docs/images/exy.png" alt="Exy mascot" width="48" /><br />exe.dev</a>
 </p>
 
+**Language:** English | [繁體中文](README.zh-TW.md)
+
+---
+
 # Pi Monorepo
 
 > **Looking for the pi coding agent?** See **[packages/coding-agent](packages/coding-agent)** for installation and usage.
