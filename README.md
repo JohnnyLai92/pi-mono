@@ -94,25 +94,103 @@ POST /v1/consolidate
 
 ### Setup
 
+#### 1. Install Python dependencies
+
 ```bash
 pip install fastapi uvicorn
+```
 
-# Start bridge (defaults: 127.0.0.1:8765, pi from PATH)
+#### 2. Prepare the pi executable
+
+**If pi is installed globally** (`npm install -g @mariozechner/pi-coding-agent`):
+
+```bash
+# Linux/macOS
 python LinkPi.py
 
-# Specify a default model or thinking level
-python LinkPi.py --model anthropic/claude-sonnet-4 --thinking medium
-
-# Custom pi executable (development)
-python LinkPi.py --pi-cmd ./pi-dev.sh
+# Windows — npm global scripts are .cmd wrappers
+python LinkPi.py --pi-cmd pi.cmd
 ```
+
+**If running from source (this monorepo):**
+
+Linux/macOS — use `pi-test.sh`:
+```bash
+python LinkPi.py --pi-cmd ./pi-test.sh
+```
+
+Windows — create `pi.cmd` in the repo root:
+```batch
+@echo off
+node "%~dp0node_modules\tsx\dist\cli.mjs" "%~dp0packages\coding-agent\src\cli.ts" %*
+```
+Then start LinkPi:
+```cmd
+python LinkPi.py --pi-cmd pi.cmd
+```
+
+> **Windows `node_modules` note:** If `node_modules` was installed under WSL/Linux, native binaries (esbuild, etc.) are Linux-only. Fix by running `npm install` from a Windows terminal. If permission errors occur on `.bin/`, delete it first from WSL (`rm -rf node_modules/.bin`), then run `npm install` from Windows.
+
+#### 3. Configure local LLM providers (optional)
+
+To add a self-hosted model (Ollama, vLLM, LM Studio), create `~/.pi/agent/models.json`:
+
+- **Windows:** `C:\Users\<username>\.pi\agent\models.json`
+- **Linux/macOS:** `~/.pi/agent/models.json`
+
+First check what models your server exposes:
+```bash
+curl http://<your-server>/v1/models
+```
+
+Example for a vLLM server running Qwen3-Coder:
+```json
+{
+  "providers": {
+    "local-llm": {
+      "baseUrl": "http://192.168.249.11:8060/v1",
+      "api": "openai-completions",
+      "apiKey": "local",
+      "compat": {
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false,
+        "supportsUsageInStreaming": false,
+        "maxTokensField": "max_tokens",
+        "thinkingFormat": "qwen-chat-template"
+      },
+      "models": [
+        {
+          "id": "qwen3-coder",
+          "name": "Qwen3-Coder 30B (Local)",
+          "reasoning": true,
+          "input": ["text"],
+          "contextWindow": 100000,
+          "maxTokens": 16384,
+          "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 }
+        }
+      ]
+    }
+  }
+}
+```
+
+Verify pi can see the model (the file reloads automatically when opening `/model`):
+```bash
+pi --list-models local-llm
+# provider   model        context  max-out  thinking  images
+# local-llm  qwen3-coder  100K     16.4K    yes       no
+```
+
+The `pi-local` model in LinkPi routes to this `local-llm` provider. To change the provider name, update `MODEL_TO_PROVIDER` in `LinkPi.py`.
+
+#### 4. Configure opencode.json
 
 Place `opencode.json` next to your project (or at `~/.config/opencode/config.json` for global use):
 
 ```json
 {
   "$schema": "https://opencode.ai/config.schema.json",
-  "model": "link-pi/pi-agent",
+  "model": "link-pi/pi-local",
   "provider": {
     "link-pi": {
       "options": {
@@ -128,6 +206,7 @@ Place `opencode.json` next to your project (or at `~/.config/opencode/config.jso
         "pi-bedrock":   { "name": "Pi \u2192 Bedrock" },
         "pi-vertex":    { "name": "Pi \u2192 Vertex" },
         "pi-openrouter":{ "name": "Pi \u2192 OpenRouter" },
+        "pi-local":     { "name": "Pi \u2192 Local (vLLM/Ollama)" },
         "pi-agent":     { "name": "Pi (default)" }
       }
     }
@@ -135,7 +214,22 @@ Place `opencode.json` next to your project (or at `~/.config/opencode/config.jso
 }
 ```
 
-LinkPi prints this snippet on startup.
+LinkPi prints a config snippet on startup. Switch providers via OpenCode's model selector (`Ctrl+M`).
+
+#### 5. Verify the setup
+
+```bash
+# 1. LinkPi is running
+curl http://127.0.0.1:8765/v1/models
+
+# 2. Pi subprocess can start
+curl http://127.0.0.1:8765/v1/memory
+
+# 3. End-to-end: LinkPi -> pi -> LLM
+curl -s http://127.0.0.1:8765/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{"model":"pi-local","stream":false,"messages":[{"role":"user","content":"reply with just PONG"}]}'
+```
 
 > **Why `options.baseURL` instead of top-level `baseURL`?**  
 > OpenCode's provider schema uses `.strict()` — only `name`, `npm`, `models`, `options`, `whitelist`, `blacklist` are allowed at the top level. `baseURL` and `apiKey` must be nested inside `options`. Placing them at the top level causes the `Unrecognized keys` validation error.
