@@ -11,6 +11,7 @@ packages/*/dist-firefox/
 
 # Environment
 .env
+.pi/APPEND_SYSTEM.md
 
 # Editor files
 .vscode/

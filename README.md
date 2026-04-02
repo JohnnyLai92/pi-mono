@@ -123,15 +123,25 @@ Linux/macOS — use `pi-test.sh`:
 python LinkPi.py --pi-cmd ./pi-test.sh
 ```
 
-Windows — create `pi.cmd` in the repo root:
-```batch
-@echo off
-node "%~dp0node_modules\tsx\dist\cli.mjs" "%~dp0packages\coding-agent\src\cli.ts" %*
-```
-Then start LinkPi:
+Windows — the repo root already includes `pi.cmd`. It operates in two modes:
+
+- **No arguments** (e.g. double-clicking the shortcut): runs `pi_startup.py`, which starts LinkPi in the background, schedules hourly GitHub auto-sync, then launches the pi interactive interface in the foreground. Closing the pi window also shuts down LinkPi.
+- **With arguments** (e.g. `pi --mode rpc ...` called by LinkPi internally): runs the pi CLI directly, bypassing the startup logic.
+
+To start LinkPi manually (no auto-sync, no desktop shortcut):
 ```cmd
 python LinkPi.py --pi-cmd pi.cmd
 ```
+
+#### Daily startup shortcut (Windows)
+
+Drag `pi.cmd` from the repo root to your desktop. Double-clicking it will:
+1. Start LinkPi server (bound to `0.0.0.0:8765`).
+2. Start a background thread that auto-commits and pushes changes every hour.
+3. Open the pi interactive interface in the foreground.
+4. Shut down LinkPi when you close the pi window.
+
+The startup script is [`pi_startup.py`](pi_startup.py) at the repo root.
 
 > **Windows `node_modules` note:** If `node_modules` was installed under WSL/Linux, native binaries (esbuild, etc.) are Linux-only. Fix by running `npm install` from a Windows terminal. If permission errors occur on `.bin/`, delete it first from WSL (`rm -rf node_modules/.bin`), then run `npm install` from Windows.
 
