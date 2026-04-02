@@ -12,12 +12,13 @@ def auto_sync_github():
         print("\n[小白報報] 🔄 正在自動同步 GitHub...")
         try:
             # 檢查是否有變更
-            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=r"C:\Projects\github\pi-mono")
+            repo_dir = os.path.dirname(os.path.abspath(__file__))
+            status = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=repo_dir)
             if status.stdout.strip():
                 now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                subprocess.run(["git", "add", "."], check=True, cwd=r"C:\Projects\github\pi-mono")
-                subprocess.run(["git", "commit", "-m", f"Auto-sync: {now}"], check=True, cwd=r"C:\Projects\github\pi-mono")
-                subprocess.run(["git", "push", "origin", "main"], check=True, cwd=r"C:\Projects\github\pi-mono")
+                subprocess.run(["git", "add", "."], check=True, cwd=repo_dir)
+                subprocess.run(["git", "commit", "-m", f"Auto-sync: {now}"], check=True, cwd=repo_dir)
+                subprocess.run(["git", "push", "origin", "main"], check=True, cwd=repo_dir)
                 print(f"[小白報報] ✅ GitHub 同步完成 ({now})")
             else:
                 print(f"[小白報報] 📝 專案沒有變更，跳過同步。({datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')})")
@@ -26,6 +27,8 @@ def auto_sync_github():
 
 if __name__ == "__main__":
     print("[小白報報] 🐶 總司令腳本啟動！準備就緒...")
+
+    pi_dir = os.path.dirname(os.path.abspath(__file__))
 
     # 1. 啟動背景 GitHub 同步執行緒
     sync_thread = threading.Thread(target=auto_sync_github, daemon=True)
@@ -39,14 +42,31 @@ if __name__ == "__main__":
             [sys.executable, "LinkPi.py", "--host", "0.0.0.0"],
             stdout=subprocess.DEVNULL, # 隱藏 LinkPi 的日誌輸出，保持畫面乾淨
             stderr=subprocess.DEVNULL,
-            cwd=r"C:\Projects\github\pi-mono"
+            cwd=pi_dir
         )
     except Exception as e:
         print(f"[小白報報] ❌ LinkPi 啟動失敗: {e}")
         sys.exit(1)
 
+    # 2.2 啟動背景 pi_scheduler (LineBot 排程中心)
+    print("[小白報報] ⏰ 正在啟動 pi_scheduler 排程中心...")
+    linebot_dir = os.path.abspath(os.path.join(pi_dir, "..", "LineBot"))
+    scheduler_process = None
+    if os.path.exists(os.path.join(linebot_dir, "pi_scheduler.py")):
+        try:
+            scheduler_process = subprocess.Popen(
+                [sys.executable, "pi_scheduler.py"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                cwd=linebot_dir
+            )
+            print("[小白報報] ✅ pi_scheduler 已啟動。")
+        except Exception as e:
+            print(f"[小白報報] ❌ pi_scheduler 啟動失敗: {e}")
+    else:
+        print(f"[小白報報] ⚠️ 找不到 {os.path.join(linebot_dir, 'pi_scheduler.py')}，跳過啟動。")
+
     # 2.5 整合記憶區 (從 .pi/memory/*.md 建立 .pi/APPEND_SYSTEM.md)
-    pi_dir = os.path.dirname(os.path.abspath(__file__))
     memory_dir = os.path.join(pi_dir, ".pi", "memory")
     append_system_path = os.path.join(pi_dir, ".pi", "APPEND_SYSTEM.md")
 
@@ -94,10 +114,18 @@ if __name__ == "__main__":
         print("\n[小白報報] ❌ 找不到 node 指令，請確認 Node.js 是否已安裝並加入環境變數。")
     finally:
         # 當強尼關閉 pi 介面時，把 LinkPi 也關掉
-        print("\n[小白報報] 💤 小白準備去睡覺了，正在關閉 LinkPi 伺服器...")
+        print("\n[小白報報] 💤 小白準備去睡覺了，正在關閉背景服務...")
         linkpi_process.terminate()
         try:
             linkpi_process.wait(timeout=5)
         except subprocess.TimeoutExpired:
             linkpi_process.kill()
+            
+        if scheduler_process:
+            scheduler_process.terminate()
+            try:
+                scheduler_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                scheduler_process.kill()
+                
         print("[小白報報] 拜拜強尼！ 👋")
