@@ -541,7 +541,7 @@ async def _stream_prompt(
     """
     # Send the prompt; the ack response is routed to a Future via send_command,
     # not to the event_queue, so it won't interfere with streaming.
-    await proc.send_command({"type": "prompt", "message": prompt}, timeout=15)
+    await proc.send_command({"type": "prompt", "message": prompt}, timeout=60)
     proc.user_message_count += 1
     log.info(
         "Prompt sent  provider=%-12s  turn=%d  len=%d",
@@ -637,7 +637,7 @@ async def _consolidate(
     proc = await PiProcess.spawn("consolidation", cmd)
     text = ""
     try:
-        await proc.send_command({"type": "prompt", "message": prompt}, timeout=15)
+        await proc.send_command({"type": "prompt", "message": prompt}, timeout=60)
         while True:
             event = await asyncio.wait_for(proc.event_queue.get(), timeout=120)
             if event is None:
