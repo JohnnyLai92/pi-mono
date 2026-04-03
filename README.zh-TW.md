@@ -123,15 +123,25 @@ Linux/macOS — 使用 `pi-test.sh`：
 python LinkPi.py --pi-cmd ./pi-test.sh
 ```
 
-Windows — 在 repo 根目錄建立 `pi.cmd`：
-```batch
-@echo off
-node "%~dp0node_modules\tsx\dist\cli.mjs" "%~dp0packages\coding-agent\src\cli.ts" %*
-```
-然後啟動 LinkPi：
+Windows — repo 根目錄已內建 `pi.cmd`，具備兩種模式：
+
+- **無引數**（例如雙擊桌面捷徑）：執行 `pi_startup.py`，在背景啟動 LinkPi、排程每小時 GitHub 自動同步，再於前景開啟 pi 互動介面。關閉 pi 視窗也會一併關閉 LinkPi。
+- **有引數**（例如 LinkPi 內部呼叫 `pi --mode rpc ...`）：直接執行 pi CLI，繞過啟動邏輯。
+
+手動啟動 LinkPi（不含自動同步與桌面捷徑）：
 ```cmd
 python LinkPi.py --pi-cmd pi.cmd
 ```
+
+#### 每日啟動捷徑（Windows）
+
+將 repo 根目錄的 `pi.cmd` 拖曳至桌面建立捷徑，雙擊後將：
+1. 在背景啟動 LinkPi 伺服器（繫結至 `0.0.0.0:8765`）。
+2. 啟動背景執行緒，每小時自動提交並推送變更。
+3. 在前景開啟 pi 互動介面。
+4. 關閉 pi 視窗時一併關閉 LinkPi。
+
+啟動腳本為 repo 根目錄的 [`pi_startup.py`](pi_startup.py)。
 
 > **Windows `node_modules` 注意事項：** 若 `node_modules` 是在 WSL/Linux 環境下安裝的，原生二進位檔（esbuild 等）僅支援 Linux。修復方式：在 Windows 終端機執行 `npm install` 以重新安裝平台專屬套件。若 `.bin/` 發生權限錯誤，請先從 WSL 刪除（`rm -rf node_modules/.bin`），再從 Windows 執行 `npm install`。
 
