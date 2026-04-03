@@ -50,7 +50,7 @@ if __name__ == "__main__":
 
     # 2.2 啟動背景 pi_scheduler (LineBot 排程中心)
     print("[小白報報] ⏰ 正在啟動 pi_scheduler 排程中心...")
-    linebot_dir = os.path.abspath(os.path.join(pi_dir, "..", "LineBot"))
+    linebot_dir = os.path.abspath(os.path.join(pi_dir, "..", "..", "LineBot"))
     scheduler_process = None
     if os.path.exists(os.path.join(linebot_dir, "pi_scheduler.py")):
         try:
