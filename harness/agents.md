@@ -7,11 +7,11 @@
   │
   │  發出命令
   ▼
-大寶（Router）
+大寶（Router）         ← pi agent（雲端 LLM）
   │
   │  分析任務 → 分派指令
   ▼
-小寶（助手）
+小寶（助手）           ← 本地 Gemma 4 31B（localhost:8080）
   │
   │  完成後回報
   ▼
@@ -28,6 +28,16 @@
 
 - **角色**：指揮官的直屬路由器，負責任務分析、分派、品質檢查與最終回報
 - **身份描述**：大寶是系統的主控台，接收強尼的命令後，分析任務需求並拆解為具體指令交給小寶執行。小寶完成後，大寶負責審查工作完成度與品質，確認無誤後向強尼回報結果。
+
+### LLM Provider
+
+| 欄位 | 值 |
+|------|----|
+| Provider | **pi agent**（pi-mono coding-agent） |
+| 模式 | `pi --mode rpc` |
+| 後端 LLM | 由 pi agent 自動選擇（Anthropic / OpenAI / Google 等雲端 LLM） |
+| 用途 | 任務分析、決策判斷、品質審查——需要強推理能力 |
+| 費用 | 依雲端 LLM API 計費 |
 
 ### 能力範圍
 
@@ -54,6 +64,19 @@
 
 - **角色**：執行者，負責程式編寫、開發與測試
 - **身份描述**：小寶是系統的技術執行者，接收大寶分派的具體指令後，進行程式碼的編寫、開發與測試工作。完成後向大寶回報執行結果與說明。
+
+### LLM Provider
+
+| 欄位 | 值 |
+|------|----|
+| Provider | **本地 vMLX（Gemma 4 31B）** |
+| API 端點 | `http://localhost:8080/v1` |
+| Model ID | `dealignai/Gemma-4-31B-JANG_4M-CRACK` |
+| API 格式 | OpenAI 相容（`/v1/chat/completions`） |
+| API Key | 不需要（本地服務） |
+| 用途 | 程式碼編寫、開發、測試——工作量大但免費 |
+| 費用 | $0（完全本地運算） |
+| 前置條件 | 需先啟動 `vmlx serve dealignai/Gemma-4-31B-JANG_4M-CRACK --port 8080` |
 
 ### 能力範圍
 
@@ -104,3 +127,45 @@
 | 品質檢查 | ✅ | ❌ |
 | git add / commit / push | ✅ | ❌ |
 | 向強尼回報 | ✅ | ❌ |
+
+---
+
+## LLM Provider 總覽
+
+```
+大寶（Router）                        小寶（助手）
+┌─────────────────────┐          ┌──────────────────────────────┐
+│  pi agent           │          │  本地 Gemma 4 31B            │
+│  (雲端 LLM)         │          │  (vMLX localhost:8080)       │
+│                     │          │                              │
+│  • 強推理能力        │  ──────▶ │  • 程式碼生成                 │
+│  • 任務分析拆解      │  分派    │  • 開發與測試                 │
+│  • 品質審查          │ ◀────── │  • 免費無限制                 │
+│  • Git 操作          │  回報    │  • 程式碼不離開本機            │
+└─────────────────────┘          └──────────────────────────────┘
+```
+
+### 連線設定
+
+| Agent | 設定項 | 值 |
+|-------|--------|----|
+| 大寶 | provider | `pi-agent` |
+| 大寶 | 啟動方式 | `pi --mode rpc` |
+| 小寶 | base_url | `http://localhost:8080/v1` |
+| 小寶 | model | `dealignai/Gemma-4-31B-JANG_4M-CRACK` |
+| 小寶 | api_key | `none`（本地不需要） |
+
+### 啟動順序
+
+```
+1. 啟動小寶的 LLM 後端（本地模型）
+   vmlx serve dealignai/Gemma-4-31B-JANG_4M-CRACK --port 8080
+
+2. 確認小寶 API 可用
+   curl http://localhost:8080/v1/models
+
+3. 啟動大寶（pi agent）
+   pi --mode rpc
+
+4. 系統就緒，等待強尼下達命令
+```
