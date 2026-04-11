@@ -1,0 +1,15 @@
+{
+  "providers": {
+    "local": {
+      "baseUrl": "http://localhost:8080/v1",
+      "apiKey": "local",
+      "api": "openai-completions",
+      "models": [
+        {
+          "id": "dealignai/Gemma-4-31B-JANG_4M-CRACK",
+          "name": "Gemma 4 31B (Local)"
+        }
+      ]
+    }
+  }
+}

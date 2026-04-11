@@ -4,6 +4,40 @@ import time
 import os
 import datetime
 import sys
+import json
+
+MODELS_JSON_PATH = os.path.expanduser("~/.pi/agent/models.json")
+
+MERIDIAN_PROVIDER = {
+    "baseUrl": "http://127.0.0.1:3456",
+    "apiKey": "x",
+    "api": "anthropic-messages",
+    "models": [
+        {"id": "claude-sonnet-4-6", "name": "Claude Sonnet 4.6 (Meridian)"},
+        {"id": "claude-opus-4-6",   "name": "Claude Opus 4.6 (Meridian)"},
+    ]
+}
+
+def add_meridian_to_models_json():
+    try:
+        with open(MODELS_JSON_PATH, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        config.setdefault("providers", {})["meridian"] = MERIDIAN_PROVIDER
+        with open(MODELS_JSON_PATH, "w", encoding="utf-8") as f:
+            json.dump(config, f, indent=2, ensure_ascii=False)
+        print("[小白報報] 📝 已將 Meridian (localhost:3456) 加入 models.json。")
+    except Exception as e:
+        print(f"[小白報報] ⚠️ 更新 models.json 失敗: {e}")
+
+def remove_meridian_from_models_json():
+    try:
+        with open(MODELS_JSON_PATH, "r", encoding="utf-8") as f:
+            config = json.load(f)
+        if config.get("providers", {}).pop("meridian", None) is not None:
+            with open(MODELS_JSON_PATH, "w", encoding="utf-8") as f:
+                json.dump(config, f, indent=2, ensure_ascii=False)
+    except Exception:
+        pass
 
 def auto_sync_github():
     while True:
@@ -29,6 +63,38 @@ if __name__ == "__main__":
     print("[小白報報] 🐶 總司令腳本啟動！準備就緒...")
 
     pi_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # 0. 詢問是否啟動 Meridian proxy
+    meridian_process = None
+    try:
+        answer = input("[小白報報] 🔌 是否啟動 Meridian proxy？(y/N) ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        answer = "n"
+
+    if answer == "y":
+        # 不論 meridian 是否成功啟動，先寫入 models.json 讓 /model 選單可見
+        add_meridian_to_models_json()
+        meridian_env = {
+            **os.environ,
+            "CLAUDE_CONFIG_DIR": os.path.expanduser("~/.config/meridian"),
+            "MERIDIAN_DEFAULT_AGENT": "pi",
+            "CLAUDE_PROXY_PASSTHROUGH": "true",
+        }
+        try:
+            meridian_process = subprocess.Popen(
+                ["meridian"],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                env=meridian_env,
+            )
+            print("[小白報報] ✅ Meridian proxy 已啟動 (port 3456)，CLAUDE_CONFIG_DIR 獨立隔離。")
+        except FileNotFoundError:
+            print("[小白報報] ⚠️ 找不到 meridian 指令，請先執行 npm install -g @rynfar/meridian")
+            print("[小白報報] 📌 模型選單已加入 Meridian，待安裝後即可使用。")
+        except Exception as e:
+            print(f"[小白報報] ⚠️ Meridian 啟動失敗（非致命）: {e}")
+    else:
+        print("[小白報報] ⏭️ 跳過 Meridian。")
 
     # 1. 啟動背景 GitHub 同步執行緒
     sync_thread = threading.Thread(target=auto_sync_github, daemon=True)
@@ -127,5 +193,14 @@ if __name__ == "__main__":
                 scheduler_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 scheduler_process.kill()
-                
+
+        if answer == "y":
+            if meridian_process:
+                meridian_process.terminate()
+                try:
+                    meridian_process.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    meridian_process.kill()
+            remove_meridian_from_models_json()
+
         print("[小白報報] 拜拜強尼！ 👋")

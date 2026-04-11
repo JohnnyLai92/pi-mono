@@ -45,6 +45,70 @@ Tools for building AI agents and managing LLM deployments.
 | **[@mariozechner/pi-web-ui](packages/web-ui)** | Web components for AI chat interfaces |
 | **[@mariozechner/pi-pods](packages/pods)** | CLI for managing vLLM deployments on GPU pods |
 
+## Harness Engineering（駕馭工程）
+
+[`harness/`](harness) 目錄包含定義 Agent 行為的核心設定檔，實踐「MD as Code」工作模式。這些 Markdown 檔案定義了雙 Agent 架構的分工邏輯與行為護欄。
+
+### 雙 Agent 架構
+
+```
+強尼（指揮官）
+  │
+  │  發出命令
+  ▼
+大寶（Router）         ← pi agent（雲端 LLM：Anthropic / OpenAI / Google）
+  │
+  │  分析任務 → 分派指令
+  ▼
+小寶（助手）           ← 本地 Gemma 4 31B（localhost:8080）
+  │
+  │  完成後回報
+  ▼
+大寶（Router）
+  │
+  │  檢查品質 → 回報結果
+  ▼
+強尼（指揮官）
+```
+
+| Agent | 角色 | LLM Provider | 權限 |
+|-------|------|--------------|------|
+| **大寶** | 任務分析、分派、品質檢查、Git 操作、最終回報 | pi agent（雲端 LLM） | 可執行 git push |
+| **小寶** | 程式碼編寫、開發、測試 | 本地 Gemma 4 31B | 禁止 git push |
+
+### 核心設定檔
+
+| 檔案 | 說明 |
+|------|------|
+| [`agents.md`](harness/agents.md) | Agent 定義：身份、能力邊界、觸發條件、權限矩陣 |
+| [`rule.md`](harness/rule.md) | 全局行為護欄：禁止行為、錯誤處理、操作確認規則 |
+| [`memory.md`](harness/memory.md) | 記憶管理：來源、優先順序、儲存格式、提取規則 |
+| [`tests.md`](harness/tests.md) | 測試框架：核心測試案例與評估標準 |
+| [`mock.md`](harness/mock.md) | 外部依賴模擬：服務清單、錯誤處理、重試策略 |
+| [`skills.md`](harness/skills.md) | 技能清單：可用工具與危險操作標記 |
+
+### 小寶 Agent Client
+
+[`harness/xiaobao.py`](harness/xiaobao.py) 是小寶的 Python 實作，使用 ACTION/PARAMS 文字格式進行工具呼叫：
+
+```bash
+# 啟動本地 Gemma 4（前置條件）
+vmlx serve dealignai/Gemma-4-31B-JANG_4M-CRACK --port 8080
+
+# 使用小寶執行任務
+python3 harness/xiaobao.py --task "寫一個 Python 腳本" --workdir .
+```
+
+### Gemma 4 31B 本地部署
+
+詳見 [`SetGemma4LLM.md`](SetGemma4LLM.md)，包含：
+- macOS + Apple Silicon 安裝步驟
+- vMLX 推理引擎設定
+- Open WebUI 聊天介面
+- 疑難排解
+
+---
+
 ## LinkPi – OpenCode (VS Code) Bridge
 
 [`LinkPi.py`](LinkPi.py) is a Python middleware that exposes pi's agent as an OpenAI-compatible HTTP API, allowing [OpenCode](https://opencode.ai) (VS Code extension) to use pi as its coding agent backend.
