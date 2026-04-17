@@ -7,7 +7,15 @@
       "models": [
         {
           "id": "dealignai/Gemma-4-31B-JANG_4M-CRACK",
-          "name": "Gemma 4 31B (Local)"
+          "name": "Gemma 4 31B (vMLX)"
+        },
+        {
+          "id": "dealignai/Phi-4-reasoning",
+          "name": "Phi-4(vMLX)"
+        },
+        {
+          "id": "gpt-oss-20b",
+          "name": "gpt-oss-20b(vMLX)"
         }
       ]
     }
