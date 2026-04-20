@@ -101,18 +101,27 @@ if __name__ == "__main__":
     sync_thread.start()
     print("[小白報報] 🕒 排程同步服務已啟動 (每小時執行一次)。")
 
-    # 2. 啟動背景 LinkPi 伺服器
-    print("[小白報報] 🚀 正在啟動 LinkPi 伺服器 (綁定 0.0.0.0:8765)...")
+    # 2. 詢問是否啟動 LinkPi 伺服器
+    linkpi_process = None
     try:
-        linkpi_process = subprocess.Popen(
-            [sys.executable, "LinkPi.py", "--host", "0.0.0.0"],
-            stdout=subprocess.DEVNULL, # 隱藏 LinkPi 的日誌輸出，保持畫面乾淨
-            stderr=subprocess.DEVNULL,
-            cwd=pi_dir
-        )
-    except Exception as e:
-        print(f"[小白報報] ❌ LinkPi 啟動失敗: {e}")
-        sys.exit(1)
+        linkpi_answer = input("[小白報報] 🔌 是否啟動 LinkPi 伺服器 (port 8765)？(y/N) ").strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        linkpi_answer = "n"
+
+    if linkpi_answer == "y":
+        print("[小白報報] 🚀 正在啟動 LinkPi 伺服器 (綁定 0.0.0.0:8765)...")
+        try:
+            linkpi_process = subprocess.Popen(
+                [sys.executable, "LinkPi.py", "--host", "0.0.0.0"],
+                stdout=subprocess.DEVNULL,  # 隱藏 LinkPi 的日誌輸出，保持畫面乾淨
+                stderr=subprocess.DEVNULL,
+                cwd=pi_dir
+            )
+            print("[小白報報] ✅ LinkPi 伺服器已啟動 (port 8765)。")
+        except Exception as e:
+            print(f"[小白報報] ❌ LinkPi 啟動失敗: {e}")
+    else:
+        print("[小白報報] ⏭️ 跳過 LinkPi。")
 
     # 2.2 啟動背景 pi_scheduler (LineBot 排程中心)
     print("[小白報報] ⏰ 正在啟動 pi_scheduler 排程中心...")
@@ -181,11 +190,12 @@ if __name__ == "__main__":
     finally:
         # 當強尼關閉 pi 介面時，把 LinkPi 也關掉
         print("\n[小白報報] 💤 小白準備去睡覺了，正在關閉背景服務...")
-        linkpi_process.terminate()
-        try:
-            linkpi_process.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            linkpi_process.kill()
+        if linkpi_process:
+            linkpi_process.terminate()
+            try:
+                linkpi_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                linkpi_process.kill()
             
         if scheduler_process:
             scheduler_process.terminate()
