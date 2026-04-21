@@ -192,7 +192,7 @@ export function getAgentDir(): string {
 		if (envDir.startsWith("~/")) return homedir() + envDir.slice(1);
 		return envDir;
 	}
-	return join(homedir(), CONFIG_DIR_NAME, "agent");
+	return join(process.cwd(), CONFIG_DIR_NAME, "agent");
 }
 
 /** Get path to user's custom themes directory */

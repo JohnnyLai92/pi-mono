@@ -1,52 +1,60 @@
 {
   "providers": {
-    "local": {
-      "baseUrl": "http://localhost:8080/v1",
-      "apiKey": "local",
-      "api": "openai-completions",
-      "models": [
-        {
-          "id": "dealignai/Gemma-4-31B-JANG_4M-CRACK",
-          "name": "Gemma 4 31B (vMLX)"
-        },
-        {
-          "id": "dealignai/Phi-4-reasoning",
-          "name": "Phi-4(vMLX)"
-        },
-        {
-          "id": "gpt-oss-20b",
-          "name": "gpt-oss-20b(vMLX)"
-        }
-      ]
-    },
-    "5090-8070": {
+    "vllm-local": {
       "baseUrl": "http://192.168.249.11:8070/v1",
       "api": "openai-completions",
-      "apiKey": "local",
+      "apiKey": "none",
       "compat": {
         "supportsDeveloperRole": false,
         "supportsReasoningEffort": false,
-        "supportsUsageInStreaming": false,
-        "maxTokensField": "max_tokens"
+        "supportsTools": true
       },
       "models": [
         {
-          "id": "google/gemma-4-26B-A4B-it",
-          "name": "gemma-4-26B (5090)",
-          "reasoning": false,
-          "input": [
-            "text"
-          ],
-          "contextWindow": 100000,
-          "maxTokens": 16384,
-          "cost": {
-            "input": 0,
-            "output": 0,
-            "cacheRead": 0,
-            "cacheWrite": 0
-          }
+          "id": "google/gemma-4-26B-A4B-it"
+        }
+      ]
+    },  
+    "vmlx-mac": {
+      "baseUrl": "http://192.168.68.57:8000/v1",
+      "api": "openai-completions",
+      "apiKey": "none",
+      "compat": {
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false,
+        "supportsTools": true
+      },
+      "models": [
+        {
+          "id": "google/Gemma-4-31B"
+        }
+      ]
+    }, 
+    "gemma4-aistudio": {
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+      "api": "google-generative-ai",
+      "apiKey": "AIzaSyBcZ3V6fvK_hnKlGvh23WSNoTqQ3z0ukh8",
+      "models": [
+        {
+          "id": "gemma-4-31b-it",
+          "name": "gemma-4-31b-it",
+          "input": ["text", "image"],
+          "contextWindow": 262144 
+        }
+      ]
+    }, 
+    "gemini3.1-aistudio": {
+      "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
+      "api": "google-generative-ai",
+      "apiKey": "AIzaSyBcZ3V6fvK_hnKlGvh23WSNoTqQ3z0ukh8",
+      "models": [
+        {
+          "id": "gemini-3.1-flash-lite-preview",
+          "name": "gemini-3.1-flash-lite-preview",
+          "input": ["text", "image"],
+          "contextWindow": 262144 
         }
       ]
     }
-  }
+  } 
 }

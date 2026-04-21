@@ -6,7 +6,10 @@ import datetime
 import sys
 import json
 
-MODELS_JSON_PATH = os.path.expanduser("~/.pi/agent/models.json")
+# 設定 Agent 目錄環境變數
+AGENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".pi", "agent"))
+os.environ["PI_CODING_AGENT_DIR"] = AGENT_DIR
+MODELS_JSON_PATH = os.path.join(AGENT_DIR, "models.json")
 
 MERIDIAN_PROVIDER = {
     "baseUrl": "http://127.0.0.1:3456",
@@ -125,7 +128,7 @@ if __name__ == "__main__":
 
     # 2.2 啟動背景 pi_scheduler (LineBot 排程中心)
     print("[小白報報] ⏰ 正在啟動 pi_scheduler 排程中心...")
-    linebot_dir = os.path.abspath(os.path.join(pi_dir, "..", "..", "LineBot"))
+    linebot_dir = os.path.abspath(os.path.join(pi_dir, "..", "LineBot"))
     scheduler_process = None
     if os.path.exists(os.path.join(linebot_dir, "pi_scheduler.py")):
         try:
