@@ -219,22 +219,19 @@ After building, `pi_startup.py` automatically uses the compiled `dist/cli.js` in
 
 #### 3. Configure local LLM providers (optional)
 
-To add a self-hosted model (Ollama, vLLM, LM Studio), create `~/.pi/agent/models.json`:
+To add a self-hosted model (Ollama, vLLM, LM Studio) or configure Google AI Studio models, create `~/.pi/agent/models.json`:
 
 - **Windows:** `C:\Users\<username>\.pi\agent\models.json`
 - **Linux/macOS:** `~/.pi/agent/models.json`
 
-First check what models your server exposes:
-```bash
-curl http://<your-server>/v1/models
-```
+#### 可用模型建議（Google AI Studio）
+您可以設定以下 Google 模型以獲得最佳效能：
+- `gemini-3.0-flash`: 極速模型，適合即時互動與高流量需求。
+- `gemini-3.0-pro`: 具備極強推理與編碼能力，適合複雜任務。
+- `gemini-3.1-flash-lite-preview`: 專為高效率與低延遲設計的最新預覽版模型。
 
-**Required fields for custom models:**
-- `baseUrl` — endpoint of your local server
-- `apiKey` — any non-empty string for unauthenticated servers (e.g. `"none"`)
-- `api` — must be set at provider **or** model level; omitting it causes a startup error. Valid values: `"openai-completions"`, `"openai-responses"`, `"anthropic-messages"`
-
-Example for a vLLM server running Qwen3-Coder:
+#### 設定範例
+詳細設定請參考以下 JSON 結構：
 ```json
 {
   "providers": {
