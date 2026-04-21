@@ -271,9 +271,15 @@ pi --list-models local-llm
 
 The `pi-local` model in LinkPi routes to this `local-llm` provider. To change the provider name, update `MODEL_TO_PROVIDER` in `LinkPi.py`.
 
-#### 4. Configure opencode.json
+### 4. 進階整合與背景服務 (pi_startup.py)
 
-Place `opencode.json` next to your project (or at `~/.config/opencode/config.json` for global use):
+`pi_startup.py` 是一個強大的總司令腳本，整合了多項進階自動化功能，啟動時會依序進行：
+
+- **Meridian Proxy**：詢問是否啟動 `meridian` (port 3456)，並自動將其配置寫入 `models.json`。
+- **GitHub 自動同步**：啟動背景執行緒，每小時自動檢查專案差異並執行 `git push`。
+- **LinkPi 伺服器**：詢問是否啟動 LinkPi (port 8765)，用於連接 OpenCode/VS Code。
+- **LineBot 排程中心**：自動啟動 `pi_scheduler.py` 進行每日財經推播與排程任務。
+- **記憶區自動整合**：掃描 `.pi/memory/*.md` 並自動合併為 `.pi/APPEND_SYSTEM.md`，作為 Agent 的系統記憶庫。
 
 ```json
 {
