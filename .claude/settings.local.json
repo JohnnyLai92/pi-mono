@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm ci *)",
+      "Bash(wait)",
+      "Bash(node -e \"import\\('@mariozechner/pi-ai'\\)\")",
+      "Bash(node -e \"console.log\\(require.resolve.toString\\(\\)\\)\")",
+      "Bash(node --input-type=module *)",
+      "Bash(cmd /c \"dir /AL node_modules\\\\@mariozechner\\\\pi-ai\")",
+      "Bash(cmd /c \"dir /AL node_modules\\\\@mariozechner\")",
+      "Bash(cmd /c \"dir node_modules\\\\@mariozechner\\\\pi-ai 2>&1\")",
+      "Bash(powershell *)"
+    ]
+  }
+}

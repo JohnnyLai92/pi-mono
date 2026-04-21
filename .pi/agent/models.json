@@ -18,6 +18,35 @@
           "name": "gpt-oss-20b(vMLX)"
         }
       ]
+    },
+    "5090-8070": {
+      "baseUrl": "http://192.168.249.11:8070/v1",
+      "api": "openai-completions",
+      "apiKey": "local",
+      "compat": {
+        "supportsDeveloperRole": false,
+        "supportsReasoningEffort": false,
+        "supportsUsageInStreaming": false,
+        "maxTokensField": "max_tokens"
+      },
+      "models": [
+        {
+          "id": "google/gemma-4-26B-A4B-it",
+          "name": "gemma-4-26B (5090)",
+          "reasoning": false,
+          "input": [
+            "text"
+          ],
+          "contextWindow": 100000,
+          "maxTokens": 16384,
+          "cost": {
+            "input": 0,
+            "output": 0,
+            "cacheRead": 0,
+            "cacheWrite": 0
+          }
+        }
+      ]
     }
   }
 }

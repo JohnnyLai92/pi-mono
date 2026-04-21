@@ -207,6 +207,14 @@ Drag `pi.cmd` from the repo root to your desktop. Double-clicking it will:
 
 The startup script is [`pi_startup.py`](pi_startup.py) at the repo root.
 
+**Faster startup (optional but recommended):** By default `pi_startup.py` launches pi via `tsx` which compiles TypeScript on-the-fly every run. Build once to get instant startup:
+
+```bash
+cd packages/coding-agent && npm run build
+```
+
+After building, `pi_startup.py` automatically uses the compiled `dist/cli.js` instead of tsx. Re-run `npm run build` whenever source files change.
+
 > **Windows `node_modules` note:** If `node_modules` was installed under WSL/Linux, native binaries (esbuild, etc.) are Linux-only. Fix by running `npm install` from a Windows terminal. If permission errors occur on `.bin/`, delete it first from WSL (`rm -rf node_modules/.bin`), then run `npm install` from Windows.
 
 #### 3. Configure local LLM providers (optional)
@@ -220,6 +228,11 @@ First check what models your server exposes:
 ```bash
 curl http://<your-server>/v1/models
 ```
+
+**Required fields for custom models:**
+- `baseUrl` — endpoint of your local server
+- `apiKey` — any non-empty string for unauthenticated servers (e.g. `"none"`)
+- `api` — must be set at provider **or** model level; omitting it causes a startup error. Valid values: `"openai-completions"`, `"openai-responses"`, `"anthropic-messages"`
 
 Example for a vLLM server running Qwen3-Coder:
 ```json

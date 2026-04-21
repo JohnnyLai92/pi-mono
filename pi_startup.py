@@ -174,14 +174,23 @@ if __name__ == "__main__":
 
     # 3. 在前景喚醒小白 (直接呼叫 node，避免透過 pi.cmd 造成無限循環)
     print("[小白報報] 🐶 正在喚醒小白...")
-    time.sleep(2) # 等待 LinkPi 啟動一下下
+    time.sleep(0.5) # 等待 LinkPi 啟動一下下
 
     node_cmd = "node"
+    # 優先使用預先編譯的 dist/cli.js（啟動快數倍），若不存在則退回 tsx 即時編譯
+    cli_js   = os.path.join(pi_dir, "packages", "coding-agent", "dist", "cli.js")
     tsx_mjs  = os.path.join(pi_dir, "node_modules", "tsx", "dist", "cli.mjs")
     cli_ts   = os.path.join(pi_dir, "packages", "coding-agent", "src", "cli.ts")
 
+    if os.path.exists(cli_js):
+        launch_cmd = [node_cmd, cli_js]
+        print("[小白報報] ⚡ 使用預編譯版本，啟動加速中...")
+    else:
+        launch_cmd = [node_cmd, tsx_mjs, cli_ts]
+        print("[小白報報] 🔧 使用 tsx 即時編譯（可執行 npm run build 加速後續啟動）")
+
     try:
-        subprocess.run([node_cmd, tsx_mjs, cli_ts], check=True, cwd=pi_dir)
+        subprocess.run(launch_cmd, check=True, cwd=pi_dir)
     except KeyboardInterrupt:
         # 強尼按下 Ctrl+C 離開
         pass
