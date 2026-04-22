@@ -33,7 +33,7 @@
     "gemma4-aistudio": {
       "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
       "api": "google-generative-ai",
-      "apiKey": "AIzaSyCOt1tqD5zlRxmL-ZnKgi4BrLz8YJS_z2Q",
+      "apiKey": "AIzaSyDodLXI1AZpsSoE1ZAy8h2Jl8RI-hgIYBw",
       "models": [
         {
           "id": "gemma-4-31b-it",
@@ -46,7 +46,7 @@
     "gemini3.1-aistudio": {
       "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
       "api": "google-generative-ai",
-      "apiKey": "AIzaSyCOt1tqD5zlRxmL-ZnKgi4BrLz8YJS_z2Q",
+      "apiKey": "AIzaSyDodLXI1AZpsSoE1ZAy8h2Jl8RI-hgIYBw",
       "models": [
         {
           "id": "gemini-3.1-flash-lite-preview",
