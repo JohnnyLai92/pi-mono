@@ -12,6 +12,7 @@ import logging
 import os
 import smtplib
 import sys
+from email.header import Header
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -51,7 +52,7 @@ def send_email(
         msg = MIMEMultipart()
         msg["From"] = from_addr
         msg["To"] = to
-        msg["Subject"] = subject
+        msg["Subject"] = Header(subject, "utf-8")
         msg.attach(MIMEText(body, "plain", "utf-8"))
 
         with smtplib.SMTP(smtp_host, smtp_port, timeout=30) as server:

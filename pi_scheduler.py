@@ -23,8 +23,6 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 import requests
 
-from pi_rpc import PiRpcClient
-
 load_dotenv()
 
 # ── Timezone ───────────────────────────────────────────────────────────────────
@@ -176,11 +174,12 @@ def task_ai_exam_email():
 
 
 # ── 財經新聞（需要 pi RPC 生成內容） ───────────────────────────────────────────
-_pi_client: PiRpcClient | None = None
+_pi_client = None
 
-def _get_pi_client() -> PiRpcClient:
+def _get_pi_client():
     global _pi_client
     if _pi_client is None:
+        from pi_rpc import PiRpcClient
         cmd_raw = os.getenv("PI_CLI_PATH", "pi")
         cmd = [tok for tok in cmd_raw.split() if not tok.startswith("--")]
         _pi_client = PiRpcClient(base_cmd=cmd, env=os.environ.copy(), timeout=300)
