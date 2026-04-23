@@ -66,8 +66,8 @@ TASK_LABELS: dict[str, str] = {
     "water":        "💧 喝水提醒",
     "quiz-noon":    "📚 ISO 27001 午間練習題",
     "quiz-eve":     "📚 ISO 27001 晚間練習題",
-    "ai-exam-noon": "🤖 AI 考題午間練習",
-    "ai-exam-eve":  "🤖 AI 考題晚間練習",
+    "ai-exam-noon": "🤖 AI 考題午間 Email",
+    "ai-exam-eve":  "🤖 AI 考題晚間 Email",
     "report":       "📋 工作確認推播",
     "network":      "🌐 網路監控",
     "news":         "📰 財經新聞",
@@ -137,17 +137,12 @@ def _set_hourly_pending(user_id: str, tasks: list[dict]) -> None:
 def task_water():        _trigger_linebot("water")
 def task_quiz_noon():    _trigger_linebot("quiz-noon")
 def task_quiz_eve():     _trigger_linebot("quiz-eve")
-def task_ai_exam_noon(): _trigger_linebot("ai-exam-noon")
-def task_ai_exam_eve():  _trigger_linebot("ai-exam-eve")
 def task_report():       _trigger_linebot("report")
 def task_network():      _trigger_linebot("network")
 
 def task_disk_monitor():
-    """Run the daily disk monitor and send email report."""
+    """每日磁碟使用報告"""
     try:
-        import sys
-        import os
-        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
         from scripts.disk_monitor import generate_report
         generate_report()
     except Exception as e:
@@ -162,13 +157,14 @@ def task_memory_summary():
         logger.error("Error running memory summary task: %s", e)
 
 def task_ai_exam_email():
-    """Run the daily AI exam email task."""
+    """AI 應用規劃師模擬考題 Email"""
     try:
-        import sys
-        import os
-        sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../../")))
         from scripts.send_ai_exam import main as run_ai_exam
         run_ai_exam()
+        # 根據執行時段更新追蹤時間
+        now = datetime.now(TZ)
+        key = "ai-exam-noon" if now.hour < 16 else "ai-exam-eve"
+        _last_run[key] = now
     except Exception as e:
         logger.error("Error running ai_exam_email task: %s", e)
 
@@ -346,27 +342,20 @@ if __name__ == "__main__":
         name="記憶彙整",
     )
 
-    # ✉️ AI 考題郵件（每日 12:00）
-    scheduler.add_job(
-        task_ai_exam_email,
-        CronTrigger(hour=12, minute=0),
-        name="AI 考題郵件",
-    )
-
     # 📚 ISO 27001 練習題（12:00 & 20:00）
     scheduler.add_job(task_quiz_noon, CronTrigger(hour=ISO_QUIZ_NOON_HOUR, minute=0), name="ISO 午間")
     scheduler.add_job(task_quiz_eve,  CronTrigger(hour=ISO_QUIZ_EVE_HOUR,  minute=0), name="ISO 晚間")
 
-    # 🤖 AI 應用規劃師練習題（12:10 & 20:10）
+    # 🤖 AI 應用規劃師模擬考題 Email（12:10 & 20:10）
     scheduler.add_job(
         task_ai_exam_email,
         CronTrigger(hour=AI_EXAM_NOON_HOUR, minute=AI_EXAM_NOON_MIN),
-        name="AI 午間",
+        name="AI 考題午間",
     )
     scheduler.add_job(
         task_ai_exam_email,
         CronTrigger(hour=AI_EXAM_EVE_HOUR, minute=AI_EXAM_EVE_MIN),
-        name="AI 晚間",
+        name="AI 考題晚間",
     )
 
     # 🕐 整點報時 + 排程健康檢查（每小時 :00，靜默時間除外）
