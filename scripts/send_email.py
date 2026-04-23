@@ -75,7 +75,7 @@ if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 
     ok = send_email(
-        subject="[PiBot] 測試郵件",
-        body="這是一封來自 PiBot 的測試郵件。\n\n若您收到此信，表示郵件系統運作正常。",
+        subject="[小白報報] 測試郵件",
+        body="強尼，這是標題更新後的測試信！\n\n現在所有由小白發出的郵件都會以 [小白報報] 開頭了 🐶",
     )
     sys.exit(0 if ok else 1)

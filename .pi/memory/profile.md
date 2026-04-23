@@ -65,6 +65,11 @@
 - **推送方式**：每日定期寄發 Email 模擬測驗題目（取代原 LINE 推播）。
 - **互動流程**：強尼在 Email 閱讀題目 $\rightarrow$ 在對話視窗回覆答案 $\rightarrow$ 小白提供解析。
 - **模組檔案**：`scripts/send_iso_quiz.py`, `scripts/send_ai_exam.py`
+- **核心技能 `generate_ipas_quiz`**：
+  - **知識對齊**：出題前必須讀取 `./iPAS/*.md`，確保考綱與術語對齊。
+  - **科目平衡**：考題須涵蓋 [AI 技術應用]、[大數據處理分析]、[機器學習技術] 三大模塊。
+  - **題目設計**：採用「情境分析題」而非「定義題」，且每題須標註 `[科目-主題]`。
+  - **執行路徑**：統一透過 `scripts/send_ai_exam.py` 寄發 Email。
 
 ## 備註
 
