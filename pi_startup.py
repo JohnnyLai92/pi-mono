@@ -7,9 +7,20 @@ import sys
 import json
 
 # 設定 Agent 目錄環境變數
-AGENT_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".pi", "agent"))
+# 優先使用家目錄下的配置，確保跨平台一致性
+PI_CONFIG_ROOT = os.path.expanduser("~/.pi")
+AGENT_DIR = os.path.join(PI_CONFIG_ROOT, "agent")
 os.environ["PI_CODING_AGENT_DIR"] = AGENT_DIR
-MODELS_JSON_PATH = os.path.join(AGENT_DIR, "models.json")
+USER_MODELS_JSON = os.path.join(PI_CONFIG_ROOT, "agent", "models.json")
+PROJECT_MODELS_JSON = os.path.join(os.path.dirname(__file__), "packages", "pods", "models.json")
+
+# 決定優先使用的 models.json 路徑
+if os.path.exists(USER_MODELS_JSON):
+    MODELS_JSON_PATH = USER_MODELS_JSON
+    MODELS_SOURCE = f"使用者設定 ({USER_MODELS_JSON})"
+else:
+    MODELS_JSON_PATH = PROJECT_MODELS_JSON
+    MODELS_SOURCE = f"專案內建 ({PROJECT_MODELS_JSON})"
 
 MERIDIAN_PROVIDER = {
     "baseUrl": "http://127.0.0.1:3456",
@@ -42,10 +53,20 @@ def remove_meridian_from_models_json():
     except Exception:
         pass
 
+def memory_summary_scheduler():
+    while True:
+        now = datetime.datetime.now()
+        # 每天 17:00 觸發
+        if now.hour == 17 and now.minute == 0:
+            print("\n[小白報報] ⏰ 時間到了！現在是 17:00，是否需要我彙整今日的短期記憶並整理至長期記憶區？")
+            # 為了防止在一分鐘內重複觸發，睡眠 61 秒
+            time.sleep(61)
+        time.sleep(30) # 每 30 秒檢查一次時間
+
 def auto_sync_github():
     while True:
         # 每 3600 秒 (1 小時) 執行一次
-        time.sleep(3600)  
+        time.sleep(3600)
         print("\n[小白報報] 🔄 正在自動同步 GitHub...")
         try:
             # 檢查是否有變更
@@ -104,6 +125,11 @@ if __name__ == "__main__":
     sync_thread.start()
     print("[小白報報] 🕒 排程同步服務已啟動 (每小時執行一次)。")
 
+    # 1.1 啟動背景記憶彙整提醒執行緒
+    mem_thread = threading.Thread(target=memory_summary_scheduler, daemon=True)
+    mem_thread.start()
+    print("[小白報報] 🧠 記憶彙整排程已啟動 (每日 17:00 提醒)。")
+
     # 2. 詢問是否啟動 LinkPi 伺服器
     linkpi_process = None
     try:
@@ -132,21 +158,25 @@ if __name__ == "__main__":
     scheduler_process = None
     if os.path.exists(os.path.join(linebot_dir, "pi_scheduler.py")):
         try:
+            # 定義錯誤日誌路徑
+            error_log_path = os.path.join(linebot_dir, "scheduler_error.log")
+            
             scheduler_process = subprocess.Popen(
                 [sys.executable, "pi_scheduler.py"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=open(os.path.join(linebot_dir, "scheduler_output.log"), "a", encoding="utf-8"),
+                stderr=open(error_log_path, "a", encoding="utf-8"),
                 cwd=linebot_dir
             )
-            print("[小白報報] ✅ pi_scheduler 已啟動。")
+            print(f"[小白報報] ✅ pi_scheduler 已啟動。錯誤日誌：{error_log_path}")
         except Exception as e:
             print(f"[小白報報] ❌ pi_scheduler 啟動失敗: {e}")
+
     else:
         print(f"[小白報報] ⚠️ 找不到 {os.path.join(linebot_dir, 'pi_scheduler.py')}，跳過啟動。")
 
     # 2.5 整合記憶區 (從 .pi/memory/*.md 建立 .pi/APPEND_SYSTEM.md)
-    memory_dir = os.path.join(pi_dir, ".pi", "memory")
-    append_system_path = os.path.join(pi_dir, ".pi", "APPEND_SYSTEM.md")
+    memory_dir = os.path.join(PI_CONFIG_ROOT, "memory")
+    append_system_path = os.path.join(PI_CONFIG_ROOT, "APPEND_SYSTEM.md")
 
     print("[小白報報] 🧠 正在讀取並整合記憶區...")
     try:

@@ -102,6 +102,43 @@ tmux kill-session -t pi-test
 - No fluff or cheerful filler text
 - Technical prose only, be kind but direct (e.g., "Thanks @user" not "Thanks so much @user!")
 
+## Memory Access
+
+When tasks relate to the user's personal goals, schedules, or preferences, you MUST NOT rely solely on conversation history. Instead, you must actively retrieve information from the user's memory files.
+
+1. **Location**: All personal memories are stored in `./.pi/memory/*.md`.
+2. **Retrieval Process**:
+   - If a user mentions a specific goal (e.g., "exam", "news", "English", "sync"), use `ls` to list files in `./.pi/memory/`.
+   - Use `read` to examine the relevant `.md` file to understand the execution rules, schedules, and scope.
+   - **Always prioritize the rules defined in memory files** over previous conversational instructions if they conflict.
+3. **Context Awareness**: Before proposing an automation or answering a question about the user's routine, always check the corresponding memory file first.
+
+## Memory Lifecycle Management
+
+To ensure efficient knowledge retention, the agent uses a dual-memory system:
+
+1. **Short-term Memory (STM)**:
+   - **Location**: `./.pi/short_term_memory/`
+   - **Usage**: Store "distilled" essence of interactions.
+   - **Automatic Capture**: For every significant decision, key finding, or pending item, the agent MUST immediately record a concise summary into STM. Do not log raw dialogue; log the *outcome*.
+2. **Long-term Memory (LTM)**:
+   - **Location**: `./.pi/memory/`
+   - **Usage**: Store validated rules, goals, and persistent preferences.
+3. **Consolidation Workflow (Daily 17:00)**:
+   - **Trigger**: The `pi_startup.py` scheduler alerts the user at 17:00.
+   - **Analysis**: The agent reads all files in STM AND analyzes the daily session log (located in `./logs/sessions/YYYY-MM-DD.md`) to ensure no key decisions were missed.
+   - **Alignment**: The agent compares new findings with existing LTM content to detect contradictions or outdated rules.
+   - **Summary**: The agent generates a concise summary, specifically highlighting **`【⚠️ 記憶衝突/更新】`** items.
+   - **Validation**: The agent presents the summary to the user. Conflicts MUST be explicitly resolved by the user before being archived.
+   - **Archive**: After confirmation, the agent organizes and merges the validated information into the appropriate LTM files and clears the STM for the next day.
+
+### Skill: consolidate_memory
+When triggered, execute the following sequence with high priority:
+- **Step 1 (Gather)**: `ls ./.pi/short_term_memory/` $\rightarrow$ `read` all STM files $\rightarrow$ `read` current date session log in `./logs/sessions/` $\rightarrow$ `read` relevant LTM files for comparison.
+- **Step 2 (Synthesize)**: Cross-reference STM and Logs against LTM. Categorize into: `[New Rules]`, `[To-Dos]`, `[Key Decisions]`, `[Knowledge]`, and **`[Conflicts]`**.
+- **Step 3 (Propose)**: Present a structured summary to User. Clearly list conflict pairs: `Old LTM Rule` $\rightarrow$ `New Proposal`.
+- **Step 4 (Commit)**: Upon approval (and conflict resolution), `edit` LTM files $\rightarrow$ `rm -rf ./.pi/short_term_memory/*`.
+
 ## Changelog
 Location: `packages/*/CHANGELOG.md` (each package has its own)
 
