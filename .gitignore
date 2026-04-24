@@ -1,40 +1,8 @@
-node_modules/
-dist/
-.pi/agent/models.json
-*.log
-.DS_Store
-*.tsbuildinfo
-# packages/*/node_modules/
-packages/*/dist/
-packages/*/dist-chrome/
-packages/*/dist-firefox/
-*.cpuprofile
-
-# Environment
 .env
-.pi/APPEND_SYSTEM.md
-
-# Editor files
-.vscode/
-.zed/
-.idea/
-*.swp
-*.swo
-*~
-
-# Package specific
-.npm/
-coverage/
-.nyc_output/
-.pi_config/
-tui-debug.log
-compaction-results/
-.opencode/
-syntax.jsonl
-out.jsonl
-pi-*.html
-out.html
-packages/coding-agent/binaries/
-todo.md
-plans/
+.pi/
 .pi_backup/
+__pycache__/
+*.pyc
+*.log
+raw_properties_dump.json
+test_unfinished_tasks*.py
