@@ -1,0 +1,39 @@
+{
+    "Owner": {
+        "id": "%3DSub",
+        "type": "people",
+        "people": []
+    },
+    "狀態": {
+        "id": "%3FXkW",
+        "type": "status",
+        "status": {
+            "id": "68455a2f-0270-4c48-9971-01ec8f0f5741",
+            "name": "未開始",
+            "color": "default"
+        }
+    },
+    "名稱": {
+        "id": "title",
+        "type": "title",
+        "title": [
+            {
+                "type": "text",
+                "text": {
+                    "content": "m20260422",
+                    "link": null
+                },
+                "annotations": {
+                    "bold": false,
+                    "italic": false,
+                    "strikethrough": false,
+                    "underline": false,
+                    "code": false,
+                    "color": "default"
+                },
+                "plain_text": "m20260422",
+                "href": null
+            }
+        ]
+    }
+}
