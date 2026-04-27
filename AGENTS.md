@@ -113,31 +113,68 @@ When tasks relate to the user's personal goals, schedules, or preferences, you M
    - **Always prioritize the rules defined in memory files** over previous conversational instructions if they conflict.
 3. **Context Awareness**: Before proposing an automation or answering a question about the user's routine, always check the corresponding memory file first.
 
+## **CRITICAL** LTM Retrieval Rules **CRITICAL**
+
+- **ALWAYS run `ls ~/.pi/memory/` (or `./.pi/memory/`) before making any claim about which memory files exist or do not exist.**
+- **NEVER treat `APPEND_SYSTEM.md` as the authoritative or complete file list.** It is a startup snapshot and goes stale whenever new memory files are added during a session or between runs.
+- The filesystem is the single source of truth for LTM. If `APPEND_SYSTEM.md` and `ls` disagree, trust `ls`.
+- Before saying "this memory does not exist", you MUST have run `ls` in the current session and confirmed the file is absent.
+
+## **CRITICAL** Behavior & Rules Questions **CRITICAL**
+
+- When the user asks about your own behavior, protocols, limitations, or rules (e.g., "what do you do when X", "how do you handle Y"), **NEVER answer from training knowledge first.**
+- The correct sequence is: **`read ~/.pi/memory/CRITICAL_RULES.md` → `ls ~/.pi/memory/` → read relevant files → then answer.**
+- `CRITICAL_RULES.md` defines the highest-priority runtime rules and MUST be consulted before stating any behavioral policy.
+- A self-generated answer that happens to be correct is still wrong if it was not grounded in LTM.
+
 ## Memory Lifecycle Management
 
-To ensure efficient knowledge retention, the agent uses a dual-memory system:
+The agent uses a dual-memory system backed by `pi_startup.py` automation.
 
 1. **Short-term Memory (STM)**:
    - **Location**: `./.pi/short_term_memory/`
-   - **Usage**: Store "distilled" essence of interactions.
-   - **Automatic Capture**: For every significant decision, key finding, or pending item, the agent MUST immediately record a concise summary into STM. Do not log raw dialogue; log the *outcome*.
+   - **Usage**: Distilled essence of each session — decisions, findings, pending items.
+   - **Write trigger**: At the END of every session, the agent MUST write a STM file named `YYYY-MM-DD_HH-MM.md`. Do not log raw dialogue; log outcomes only.
+   - **Fallback**: If the agent did not write STM, `pi_startup.py` auto-generates one from `logs/sessions/YYYY-MM-DD.md` after the session exits.
+
 2. **Long-term Memory (LTM)**:
-   - **Location**: `./.pi/memory/`
-   - **Usage**: Store validated rules, goals, and persistent preferences.
+   - **Location**: `~/.pi/memory/`
+   - **Usage**: Validated rules, goals, persistent preferences.
+
 3. **Consolidation Workflow (Daily 17:00)**:
-   - **Trigger**: The `pi_startup.py` scheduler alerts the user at 17:00.
-   - **Analysis**: The agent reads all files in STM AND analyzes the daily session log (located in `./logs/sessions/YYYY-MM-DD.md`) to ensure no key decisions were missed.
-   - **Alignment**: The agent compares new findings with existing LTM content to detect contradictions or outdated rules.
-   - **Summary**: The agent generates a concise summary, specifically highlighting **`【⚠️ 記憶衝突/更新】`** items.
-   - **Validation**: The agent presents the summary to the user. Conflicts MUST be explicitly resolved by the user before being archived.
-   - **Archive**: After confirmation, the agent organizes and merges the validated information into the appropriate LTM files and clears the STM for the next day.
+   - **Guard**: `pi_startup.py` only fires the 17:00 reminder if STM has content; if STM is empty, no reminder fires.
+   - **Pending reminder**: If previous-day STM was not consolidated, `pi_startup.py` warns at next startup.
+   - **Trigger**: User runs `consolidate_memory` (or responds to the 17:00 prompt).
+   - **Analysis**: Agent reads all STM files + today's session log → compares with LTM → detects contradictions.
+   - **Validation**: Agent presents structured summary; conflicts MUST be resolved by user before archiving.
+   - **Archive**: After user confirmation → edit LTM files → `rm -rf ./.pi/short_term_memory/*` → write `./.pi/stm_state.json`.
 
 ### Skill: consolidate_memory
-When triggered, execute the following sequence with high priority:
-- **Step 1 (Gather)**: `ls ./.pi/short_term_memory/` $\rightarrow$ `read` all STM files $\rightarrow$ `read` current date session log in `./logs/sessions/` $\rightarrow$ `read` relevant LTM files for comparison.
-- **Step 2 (Synthesize)**: Cross-reference STM and Logs against LTM. Categorize into: `[New Rules]`, `[To-Dos]`, `[Key Decisions]`, `[Knowledge]`, and **`[Conflicts]`**.
-- **Step 3 (Propose)**: Present a structured summary to User. Clearly list conflict pairs: `Old LTM Rule` $\rightarrow$ `New Proposal`.
-- **Step 4 (Commit)**: Upon approval (and conflict resolution), `edit` LTM files $\rightarrow$ `rm -rf ./.pi/short_term_memory/*`.
+Execute this sequence with high priority when triggered:
+- **Step 1 (Gather)**: `ls ./.pi/short_term_memory/` → read all STM files → read `./logs/sessions/YYYY-MM-DD.md` → read relevant LTM files.
+- **Step 2 (Synthesize)**: Cross-reference STM + log vs. LTM. Categorize: `[New Rules]`, `[To-Dos]`, `[Key Decisions]`, `[Knowledge]`, **`[Conflicts]`**.
+- **Step 3 (Propose)**: Present structured summary. List conflict pairs: `Old LTM` → `New Proposal`.
+- **Step 4 (Commit)**: After user approval → edit LTM files → `rm -rf ./.pi/short_term_memory/*` → write `./.pi/stm_state.json`:
+  ```json
+  {"last_consolidated_date": "YYYY-MM-DD"}
+  ```
+
+### STM write format (required at session end)
+```markdown
+# STM: YYYY-MM-DD HH:MM
+
+## 重要決策
+- ...
+
+## 關鍵發現
+- ...
+
+## 待辦事項
+- [ ] ...
+
+## 已完成
+- [x] ...
+```
 
 ## Changelog
 Location: `packages/*/CHANGELOG.md` (each package has its own)

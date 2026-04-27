@@ -87,6 +87,44 @@ Tools for building AI agents and managing LLM deployments.
 | [`mock.md`](harness/mock.md) | 外部依賴模擬：服務清單、錯誤處理、重試策略 |
 | [`skills.md`](harness/skills.md) | 技能清單：可用工具與危險操作標記 |
 
+### 記憶管理架構（STM / LTM）
+
+`pi_startup.py` 實作雙層記憶系統，確保跨 session 的對話脈絡不遺失：
+
+```
+每次 session 結束
+  │
+  ├─ agent 主動寫入 STM（.pi/short_term_memory/YYYY-MM-DD_HH-MM.md）
+  └─ 若 agent 未寫入 → pi_startup.py 自動呼叫 claude -p 生成摘要（fallback）
+
+每次 pi_startup.py 啟動
+  │
+  ├─ 掃描 ~/.pi/memory/*.md（LTM）
+  ├─ 掃描 .pi/short_term_memory/*.md（STM）
+  ├─ 合併寫入 .pi/APPEND_SYSTEM.md → agent 自動載入完整記憶 context
+  └─ 若有跨日未彙整 STM → 顯示提醒
+
+每日 17:00（background scheduler）
+  │
+  ├─ 若 STM 有內容 → 提醒強尼執行 consolidate_memory
+  └─ 若 STM 為空 → 靜默（不打擾）
+
+consolidate_memory（user 確認後執行）
+  │
+  ├─ 讀取 STM + session log → 比對 LTM → 提出衝突與建議
+  ├─ 強尼確認後 → 更新 LTM 檔案
+  ├─ 清除 STM（rm -rf .pi/short_term_memory/*）
+  └─ 寫入 .pi/stm_state.json（記錄彙整日期）
+```
+
+| 路徑 | 說明 |
+|------|------|
+| `~/.pi/memory/*.md` | LTM：長期規則、偏好、目標 |
+| `.pi/short_term_memory/*.md` | STM：當日 session 摘要 |
+| `.pi/APPEND_SYSTEM.md` | 啟動快照：LTM + STM 合併（agent 自動載入） |
+| `.pi/stm_state.json` | 彙整狀態追蹤（`last_consolidated_date`） |
+| `logs/sessions/YYYY-MM-DD.md` | 原始 session 日誌（由 agent 寫入） |
+
 ### 小寶 Agent Client
 
 [`harness/xiaobao.py`](harness/xiaobao.py) 是小寶的 Python 實作，使用 ACTION/PARAMS 文字格式進行工具呼叫：

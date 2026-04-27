@@ -6,3 +6,7 @@ __pycache__/
 *.log
 raw_properties_dump.json
 test_unfinished_tasks*.py
+# Build artifacts and dependencies
+node_modules/
+**/dist/
+

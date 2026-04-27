@@ -28,6 +28,10 @@ MERIDIAN_PROVIDER = {
     ]
 }
 
+# ---------------------------------------------------------------------------
+# Meridian helpers
+# ---------------------------------------------------------------------------
+
 def add_meridian_to_models_json():
     try:
         with open(MODELS_JSON_PATH, "r", encoding="utf-8") as f:
@@ -46,13 +50,67 @@ def remove_meridian_from_models_json():
                 json.dump(config, f, indent=2, ensure_ascii=False)
     except Exception: pass
 
-def memory_summary_scheduler():
+# ---------------------------------------------------------------------------
+# STM state helpers
+# ---------------------------------------------------------------------------
+
+def load_stm_state(stm_state_file):
+    try:
+        with open(stm_state_file, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+def save_stm_state(stm_state_file, state):
+    try:
+        with open(stm_state_file, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2, ensure_ascii=False)
+    except Exception: pass
+
+def has_stm_content(stm_dir):
+    if not os.path.exists(stm_dir):
+        return False
+    return any(f.endswith(".md") for f in os.listdir(stm_dir))
+
+# ---------------------------------------------------------------------------
+# Startup: warn if there is un-consolidated STM from a previous day
+# ---------------------------------------------------------------------------
+
+def check_pending_consolidation(stm_dir, stm_state_file):
+    if not has_stm_content(stm_dir):
+        return
+    today = datetime.date.today().isoformat()
+    state = load_stm_state(stm_state_file)
+    if state.get("last_consolidated_date") == today:
+        return
+    old_files = [
+        f for f in os.listdir(stm_dir)
+        if f.endswith(".md") and not f.startswith(today)
+    ]
+    if old_files:
+        last = state.get("last_consolidated_date", "從未")
+        print(f"\n[小白報報] ⚠️  發現 {len(old_files)} 個未彙整的 STM 記憶（上次彙整：{last}）")
+        print("[小白報報] 💡 請優先在 pi 中執行：consolidate_memory\n")
+
+# ---------------------------------------------------------------------------
+# Background: 17:00 consolidation reminder (only when STM has content)
+# ---------------------------------------------------------------------------
+
+def memory_summary_scheduler(stm_dir, stm_state_file):
     while True:
         now = datetime.datetime.now()
         if now.hour == 17 and now.minute == 0:
-            print("\n[小白報報] ⏰ 時間到了！現在是 17:00，是否需要我彙整今日的短期記憶並整理至長期記憶區？")
+            today = datetime.date.today().isoformat()
+            state = load_stm_state(stm_state_file)
+            if state.get("last_consolidated_date") != today and has_stm_content(stm_dir):
+                print("\n[小白報報] ⏰ 17:00 記憶彙整提醒！今日有未彙整的 STM 記憶。")
+                print("[小白報報] 💡 請在 pi 中執行 consolidate_memory，完成後系統將清除 STM 並更新 LTM\n")
             time.sleep(61)
         time.sleep(30)
+
+# ---------------------------------------------------------------------------
+# Background: auto git sync
+# ---------------------------------------------------------------------------
 
 def auto_sync_github():
     while True:
@@ -66,6 +124,10 @@ def auto_sync_github():
                 subprocess.run(["git", "commit", "-m", f"Auto-sync: {now}"], check=True, cwd=repo_dir)
                 subprocess.run(["git", "push", "origin", "main"], check=True, cwd=repo_dir)
         except Exception: pass
+
+# ---------------------------------------------------------------------------
+# Notion reminder
+# ---------------------------------------------------------------------------
 
 def remind_notion_tasks():
     try:
@@ -92,9 +154,119 @@ def remind_notion_tasks():
     except Exception as e:
         print(f"[小白報報] ⚠️ Notion 提醒出錯: {e}")
 
+# ---------------------------------------------------------------------------
+# Post-session: auto-capture session log to STM if agent did not write one
+# ---------------------------------------------------------------------------
+
+def capture_session_to_stm(pi_dir, stm_dir):
+    today = datetime.date.today().isoformat()
+    existing_today = [
+        f for f in (os.listdir(stm_dir) if os.path.exists(stm_dir) else [])
+        if f.endswith(".md") and f.startswith(today)
+    ]
+    if existing_today:
+        return  # agent already wrote STM this session
+
+    session_log = os.path.join(pi_dir, "logs", "sessions", f"{today}.md")
+    if not os.path.exists(session_log):
+        return
+
+    try:
+        with open(session_log, "r", encoding="utf-8") as f:
+            log_content = f.read().strip()
+    except Exception:
+        return
+
+    if not log_content:
+        return
+
+    print("\n[小白報報] 📝 本次 session 未偵測到 STM 記錄，正在自動生成摘要...")
+    prompt = (
+        f"請根據以下今日（{today}）的對話日誌，生成一份簡潔的 STM（短期記憶）摘要。\n"
+        "格式要求：\n"
+        f"- 標題：# STM: {today} 自動摘要\n"
+        "- 條列：重要決策、關鍵發現、待辦事項、已完成事項\n"
+        "- 不記錄原始對話，只記錄結果與重點\n"
+        "- 使用繁體中文\n\n"
+        f"對話日誌：\n{log_content}"
+    )
+    try:
+        result = subprocess.run(
+            ["claude", "-p", prompt],
+            capture_output=True, text=True, encoding="utf-8",
+            cwd=pi_dir, timeout=90
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            os.makedirs(stm_dir, exist_ok=True)
+            now_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
+            stm_file = os.path.join(stm_dir, f"{now_str}_auto.md")
+            with open(stm_file, "w", encoding="utf-8") as f:
+                f.write(result.stdout.strip())
+            print(f"[小白報報] ✅ STM 自動摘要已寫入：{os.path.basename(stm_file)}")
+        else:
+            print(f"[小白報報] ⚠️ 自動摘要失敗（exit {result.returncode}）")
+    except Exception as e:
+        print(f"[小白報報] ⚠️ 自動生成 STM 摘要失敗：{e}")
+
+# ---------------------------------------------------------------------------
+# Build APPEND_SYSTEM.md: LTM + STM → project-level path (loaded by agent)
+# ---------------------------------------------------------------------------
+
+def rebuild_append_system(pi_dir, memory_dir, stm_dir, append_system_path):
+    sections = []
+
+    # LTM
+    if os.path.exists(memory_dir):
+        ltm_contents = []
+        for filename in sorted(os.listdir(memory_dir)):
+            if filename.endswith(".md"):
+                try:
+                    with open(os.path.join(memory_dir, filename), "r", encoding="utf-8") as f:
+                        c = f.read().strip()
+                    if c:
+                        ltm_contents.append(f"### Memory: {filename}\n{c}\n")
+                except Exception as e:
+                    print(f"[小白報報] ⚠️ 無法讀取記憶檔 {filename}: {e}")
+        if ltm_contents:
+            sections.append("# User Memory / Preferences (LTM)\n\n" + "\n".join(ltm_contents))
+        print(f"[小白報報] 🧠 LTM：已載入 {len(ltm_contents)} 個記憶檔")
+
+    # STM
+    if os.path.exists(stm_dir):
+        stm_contents = []
+        for filename in sorted(os.listdir(stm_dir)):
+            if filename.endswith(".md"):
+                try:
+                    with open(os.path.join(stm_dir, filename), "r", encoding="utf-8") as f:
+                        c = f.read().strip()
+                    if c:
+                        stm_contents.append(f"### STM: {filename}\n{c}\n")
+                except Exception as e:
+                    print(f"[小白報報] ⚠️ 無法讀取 STM 檔 {filename}: {e}")
+        if stm_contents:
+            sections.append("# Recent Session Context (STM)\n\n" + "\n".join(stm_contents))
+            print(f"[小白報報] 📝 STM：已載入 {len(stm_contents)} 個短期記憶")
+
+    with open(append_system_path, "w", encoding="utf-8") as f:
+        f.write("\n\n---\n\n".join(sections))
+
+# ---------------------------------------------------------------------------
+# Entry point
+# ---------------------------------------------------------------------------
+
 if __name__ == "__main__":
     print("[小白報報] 🐶 總司令腳本啟動！")
     pi_dir = os.path.dirname(os.path.abspath(__file__))
+
+    memory_dir    = os.path.join(PI_CONFIG_ROOT, "memory")
+    stm_dir       = os.path.join(pi_dir, ".pi", "short_term_memory")
+    stm_state_file = os.path.join(pi_dir, ".pi", "stm_state.json")
+    # resource-loader.ts checks {cwd}/.pi/APPEND_SYSTEM.md first
+    append_system_path = os.path.join(pi_dir, ".pi", "APPEND_SYSTEM.md")
+
+    # --- startup checks ---
+    check_pending_consolidation(stm_dir, stm_state_file)
+
     meridian_process = None
     try:
         answer = input("[小白報報] 🔌 是否啟動 Meridian proxy？(y/N) ").strip().lower()
@@ -102,46 +274,60 @@ if __name__ == "__main__":
     if answer == "y":
         add_meridian_to_models_json()
         try:
-            meridian_process = subprocess.Popen(["meridian"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, env={**os.environ, "CLAUDE_CONFIG_DIR": os.path.expanduser("~/.config/meridian"), "MERIDIAN_DEFAULT_AGENT": "pi", "CLAUDE_PROXY_PASSTHROUGH": "true"})
+            meridian_process = subprocess.Popen(
+                ["meridian"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                env={**os.environ,
+                     "CLAUDE_CONFIG_DIR": os.path.expanduser("~/.config/meridian"),
+                     "MERIDIAN_DEFAULT_AGENT": "pi",
+                     "CLAUDE_PROXY_PASSTHROUGH": "true"}
+            )
         except: pass
+
     threading.Thread(target=auto_sync_github, daemon=True).start()
-    threading.Thread(target=memory_summary_scheduler, daemon=True).start()
+    threading.Thread(target=memory_summary_scheduler, args=(stm_dir, stm_state_file), daemon=True).start()
+
     linkpi_process = None
     try:
         linkpi_answer = input("[小白報報] 🔌 是否啟動 LinkPi 伺服器 (port 8765)？(y/N) ").strip().lower()
     except: linkpi_answer = "n"
     if linkpi_answer == "y":
         try:
-            linkpi_process = subprocess.Popen([sys.executable, "LinkPi.py", "--host", "0.0.0.0"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=pi_dir)
+            linkpi_process = subprocess.Popen(
+                [sys.executable, "LinkPi.py", "--host", "0.0.0.0"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=pi_dir
+            )
         except: pass
+
     scheduler_process = None
     if os.path.exists(os.path.join(pi_dir, "pi_scheduler.py")):
         try:
-            scheduler_process = subprocess.Popen([sys.executable, "pi_scheduler.py"], stdout=open(os.path.join(pi_dir, "scheduler_output.log"), "a", encoding="utf-8"), stderr=open(os.path.join(pi_dir, "scheduler_error.log"), "a", encoding="utf-8"), cwd=pi_dir)
+            scheduler_process = subprocess.Popen(
+                [sys.executable, "pi_scheduler.py"],
+                stdout=open(os.path.join(pi_dir, "scheduler_output.log"), "a", encoding="utf-8"),
+                stderr=open(os.path.join(pi_dir, "scheduler_error.log"), "a", encoding="utf-8"),
+                cwd=pi_dir
+            )
         except: pass
-    memory_dir = os.path.join(PI_CONFIG_ROOT, "memory")
-    append_system_path = os.path.join(PI_CONFIG_ROOT, "APPEND_SYSTEM.md")
-    try:
-        if os.path.exists(memory_dir):
-            memory_contents = []
-            for filename in os.listdir(memory_dir):
-                if filename.endswith(".md"):
-                    with open(os.path.join(memory_dir, filename), "r", encoding="utf-8") as f:
-                        c = f.read().strip()
-                        if c: memory_contents.append(f"### Memory: {filename}\n{c}\n")
-            if memory_contents:
-                with open(append_system_path, "w", encoding="utf-8") as f: f.write("# User Memory / Preferences\n\n" + "\n".join(memory_contents))
-    except: pass
+
+    # Build context for agent
+    rebuild_append_system(pi_dir, memory_dir, stm_dir, append_system_path)
     remind_notion_tasks()
+
     node_cmd = "node"
-    cli_js = os.path.join(pi_dir, "packages", "coding-agent", "dist", "cli.js")
+    cli_js  = os.path.join(pi_dir, "packages", "coding-agent", "dist", "cli.js")
     tsx_mjs = os.path.join(pi_dir, "node_modules", "tsx", "dist", "cli.mjs")
-    cli_ts = os.path.join(pi_dir, "packages", "coding-agent", "src", "cli.ts")
+    cli_ts  = os.path.join(pi_dir, "packages", "coding-agent", "src", "cli.ts")
     launch_cmd = [node_cmd, cli_js] if os.path.exists(cli_js) else [node_cmd, tsx_mjs, cli_ts]
+
     try:
         subprocess.run(launch_cmd, check=True, cwd=pi_dir)
     except: pass
     finally:
+        # Post-session: auto-capture STM if agent did not write one
+        capture_session_to_stm(pi_dir, stm_dir)
+        # Rebuild context with fresh STM so next startup is up-to-date
+        rebuild_append_system(pi_dir, memory_dir, stm_dir, append_system_path)
         if linkpi_process: linkpi_process.terminate()
         if scheduler_process: scheduler_process.terminate()
         if meridian_process: meridian_process.terminate()

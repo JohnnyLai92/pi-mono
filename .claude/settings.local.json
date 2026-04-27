@@ -9,7 +9,8 @@
       "Bash(cmd /c \"dir /AL node_modules\\\\@mariozechner\\\\pi-ai\")",
       "Bash(cmd /c \"dir /AL node_modules\\\\@mariozechner\")",
       "Bash(cmd /c \"dir node_modules\\\\@mariozechner\\\\pi-ai 2>&1\")",
-      "Bash(powershell *)"
+      "Bash(powershell *)",
+      "Bash(node -e \"import\\('@mariozechner/pi-ai'\\).then\\(m => console.log\\('OK:', Object.keys\\(m\\).slice\\(0,3\\)\\)\\).catch\\(e => console.error\\('FAIL:', e.message\\)\\)\")"
     ]
   }
 }

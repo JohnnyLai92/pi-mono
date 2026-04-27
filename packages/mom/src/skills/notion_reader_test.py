@@ -14,9 +14,8 @@ class NotionSkill:
         self.database_id = os.getenv("NOTION_DATABASE_ID")
         self.base_url = "https://api.notion.com/v1"
         
-        # Use requests.Session for connection pooling and shared headers
         self._session = requests.Session()
-        self._session.verify = False  # Skip SSL certificate verification as per user preference
+        self._session.verify = False
         if self.token:
             self._session.headers.update({
                 "Authorization": f"Bearer {self.token}",
@@ -40,94 +39,29 @@ class NotionSkill:
         return "Unknown"
 
     def _paginate(self, url: str, payload: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Generic Notion API pagination handler."""
         results = []
         cursor = None
         while True:
             if cursor:
                 payload["start_cursor"] = cursor
-            
             try:
                 response = self._session.post(url, json=payload, timeout=self.DEFAULT_TIMEOUT)
                 response.raise_for_status()
                 data = response.json()
-                
                 results.extend(data.get("results", []))
                 if not data.get("has_more"):
                     break
                 cursor = data.get("next_cursor")
             except Exception as e:
-                # In a real scenario, we might want to raise this or log it
-                # For this skill, we return what we have so far and append the error
                 results.append({"error": f"Pagination failed: {str(e)}"})
                 break
         return results
 
-    def list_pages(self) -> List[Dict[str, Any]]:
-        """Lists all pages using the search API (General Search)."""
-        if not self.token:
-            return [{"error": "NOTION_TOKEN is not set in environment variables."}]
-        
-        url = f"{self.base_url}/search"
-        payload = {}
-        
-        try:
-            all_results = self._paginate(url, payload)
-            pages = []
-            for obj in all_results:
-                if "error" in obj:
-                    pages.append(obj)
-                    continue
-                if obj.get("object") == "page":
-                    title = self._extract_title(obj.get("properties", {}))
-                    pages.append({
-                        "id": obj["id"], 
-                        "title": title, 
-                        "object": obj["object"], 
-                        "url": obj.get("url", "")
-                    })
-            return pages
-        except Exception as e:
-            return [{"error": f"API Request failed: {str(e)}"}]
-
-    def update_heartbeat(self, page_id: str, timestamp: str):
-        """
-        Update the '說明' (Description) property of a specific page to record the heartbeat.
-        """
-        if not self.token:
-            return {"error": "NOTION_TOKEN is not set."}
-        
-        url = f"{self.base_url}/pages/{page_id}"
-        
-        payload = {
-            "properties": {
-                "說明": {
-                    "rich_text": [
-                        {
-                            "text": {
-                                "content": f"上次小白登入時間：{timestamp}"
-                            }
-                        }
-                    ]
-                }
-            }
-        }
-        
-        try:
-            response = self._session.patch(url, json=payload, timeout=self.DEFAULT_TIMEOUT)
-            response.raise_for_status()
-            return {"status": "success"}
-        except Exception as e:
-            return {"error": f"Heartbeat update failed: {str(e)}"}
-
     def get_unfinished_tasks(self) -> List[Dict[str, Any]]:
-        """
-        Retrieves unfinished tasks from the target database, filtered client-side.
-        """
         if not self.token:
-            return [{"error": "NOTION_TOKEN is not set in environment variables."}]
+            return [{"error": "NOTION_TOKEN is not set."}]
         if not self.database_id:
-            return [{"error": "NOTION_DATABASE_ID is not set in environment variables."}]
+            return [{"error": "NOTION_DATABASE_ID is not set."}]
 
         url = f"{self.base_url}/databases/{self.database_id}/query"
         all_results = self._paginate(url, {})
@@ -148,5 +82,18 @@ class NotionSkill:
                         "status": status, 
                         "url": obj.get("url", "")
                     })
-        
         return unfinished
+
+if __name__ == "__main__":
+    import sys
+    # Force UTF-8 output for Windows
+    if sys.stdout.encoding != 'utf-8':
+        try:
+            sys.stdout.reconfigure(encoding='utf-8')
+        except AttributeError:
+            pass
+
+    skill = NotionSkill()
+    tasks = skill.get_unfinished_tasks()
+    for task in tasks:
+        print(task)
