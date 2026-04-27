@@ -156,45 +156,112 @@ def remind_notion_tasks():
 
 # ---------------------------------------------------------------------------
 # Post-session: auto-capture session log to STM if agent did not write one
+# Source: ~/.pi/agent/sessions/{cwd-slug}/*.jsonl (always created by pi CLI)
 # ---------------------------------------------------------------------------
+
+def _cwd_to_session_slug(cwd):
+    """Convert a path to the session directory slug pi uses.
+
+    Matches session-manager.ts line 422:
+      `--${cwd.replace(/^[/\\]/, "").replace(/[/\\:]/g, "-")}--`
+    e.g. C:\\Projects\\github\\pi-mono → --C--Projects-github-pi-mono--
+    """
+    import re
+    stripped = re.sub(r'^[/\\]', '', cwd)
+    safe = re.sub(r'[/\\:]', '-', stripped)
+    return f'--{safe}--'
+
+def _extract_messages_from_jsonl(jsonl_path):
+    """Return list of (role, text) from a pi session JSONL file."""
+    msgs = []
+    try:
+        with open(jsonl_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line:
+                    continue
+                obj = json.loads(line)
+                if obj.get("type") != "message":
+                    continue
+                msg = obj.get("message", {})
+                role = msg.get("role", "")
+                if role not in ("user", "assistant"):
+                    continue
+                content = msg.get("content", "")
+                if isinstance(content, list):
+                    text = " ".join(
+                        c.get("text", "") for c in content
+                        if isinstance(c, dict) and c.get("type") == "text"
+                    )
+                else:
+                    text = str(content)
+                text = text.strip()
+                if text:
+                    msgs.append((role, text))
+    except Exception:
+        pass
+    return msgs
 
 def capture_session_to_stm(pi_dir, stm_dir):
     today = datetime.date.today().isoformat()
+
+    # Skip if agent already wrote an STM file today
     existing_today = [
         f for f in (os.listdir(stm_dir) if os.path.exists(stm_dir) else [])
         if f.endswith(".md") and f.startswith(today)
     ]
     if existing_today:
-        return  # agent already wrote STM this session
-
-    session_log = os.path.join(pi_dir, "logs", "sessions", f"{today}.md")
-    if not os.path.exists(session_log):
         return
 
-    try:
-        with open(session_log, "r", encoding="utf-8") as f:
-            log_content = f.read().strip()
-    except Exception:
+    # Locate today's JSONL session files (pi CLI always creates these)
+    slug = _cwd_to_session_slug(pi_dir)
+    session_dir = os.path.join(PI_CONFIG_ROOT, "agent", "sessions", slug)
+    if not os.path.exists(session_dir):
         return
 
-    if not log_content:
+    import glob as _glob
+    today_files = sorted(_glob.glob(os.path.join(session_dir, f"{today.replace('-', '-')}T*.jsonl")))
+    # Use ISO date prefix: 2026-04-27 → files start with 2026-04-27T
+    today_prefix = today + "T"
+    today_files = sorted(
+        f for f in os.listdir(session_dir)
+        if f.startswith(today_prefix) and f.endswith(".jsonl")
+    )
+    if not today_files:
         return
 
-    print("\n[小白報報] 📝 本次 session 未偵測到 STM 記錄，正在自動生成摘要...")
+    # Collect all messages across today's sessions (cap at 6000 chars for prompt)
+    all_lines = []
+    for fname in today_files:
+        msgs = _extract_messages_from_jsonl(os.path.join(session_dir, fname))
+        for role, text in msgs:
+            label = "強尼" if role == "user" else "Agent"
+            all_lines.append(f"[{label}] {text[:300]}")
+
+    if not all_lines:
+        return
+
+    conversation_text = "\n".join(all_lines)
+    if len(conversation_text) > 6000:
+        conversation_text = conversation_text[:6000] + "\n...(截斷)"
+
+    print(f"\n[小白報報] 📝 偵測到今日 {len(today_files)} 個 session，自動生成 STM 摘要...")
     prompt = (
-        f"請根據以下今日（{today}）的對話日誌，生成一份簡潔的 STM（短期記憶）摘要。\n"
-        "格式要求：\n"
-        f"- 標題：# STM: {today} 自動摘要\n"
-        "- 條列：重要決策、關鍵發現、待辦事項、已完成事項\n"
-        "- 不記錄原始對話，只記錄結果與重點\n"
-        "- 使用繁體中文\n\n"
-        f"對話日誌：\n{log_content}"
+        f"以下是今日（{today}）與 pi agent 的對話紀錄摘錄（共 {len(all_lines)} 則訊息）。\n"
+        "請生成一份簡潔的 STM（短期記憶）摘要，格式如下：\n\n"
+        f"# STM: {today} 自動摘要\n\n"
+        "## 重要決策\n- ...\n\n"
+        "## 關鍵發現\n- ...\n\n"
+        "## 待辦事項\n- [ ] ...\n\n"
+        "## 已完成\n- [x] ...\n\n"
+        "規則：只記錄結果與重點，不記錄原始對話。使用繁體中文。\n\n"
+        f"對話紀錄：\n{conversation_text}"
     )
     try:
         result = subprocess.run(
             ["claude", "-p", prompt],
             capture_output=True, text=True, encoding="utf-8",
-            cwd=pi_dir, timeout=90
+            cwd=pi_dir, timeout=120
         )
         if result.returncode == 0 and result.stdout.strip():
             os.makedirs(stm_dir, exist_ok=True)

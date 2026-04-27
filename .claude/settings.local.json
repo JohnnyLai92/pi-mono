@@ -10,7 +10,9 @@
       "Bash(cmd /c \"dir /AL node_modules\\\\@mariozechner\")",
       "Bash(cmd /c \"dir node_modules\\\\@mariozechner\\\\pi-ai 2>&1\")",
       "Bash(powershell *)",
-      "Bash(node -e \"import\\('@mariozechner/pi-ai'\\).then\\(m => console.log\\('OK:', Object.keys\\(m\\).slice\\(0,3\\)\\)\\).catch\\(e => console.error\\('FAIL:', e.message\\)\\)\")"
+      "Bash(node -e \"import\\('@mariozechner/pi-ai'\\).then\\(m => console.log\\('OK:', Object.keys\\(m\\).slice\\(0,3\\)\\)\\).catch\\(e => console.error\\('FAIL:', e.message\\)\\)\")",
+      "Bash(python -c \" import json f = open\\('/c/Users/johnny/.pi/agent/sessions/--C--Projects-github-pi-mono--/2026-04-27T01-17-15-510Z_e2ff3f0b-fdf2-47e6-826a-a3399ce6e0da.jsonl', encoding='utf-8'\\) for i, line in enumerate\\(f\\): obj = json.loads\\(line\\) if obj.get\\('type'\\) == 'message': role = obj.get\\('role',''\\) content = obj.get\\('content',''\\) if isinstance\\(content, list\\): text = ' '.join\\(c.get\\('text',''\\) for c in content if isinstance\\(c,dict\\) and c.get\\('type'\\)=='text'\\) else: text = str\\(content\\) print\\(f'[{role}] {text[:120]}'\\) if i > 30: break \")",
+      "Bash(python *)"
     ]
   }
 }
