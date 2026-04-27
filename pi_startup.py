@@ -6,6 +6,12 @@ import datetime
 import sys
 import json
 
+# Ensure UTF-8 output on Windows (prevents UnicodeEncodeError with emoji/CJK)
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 # 設定 Agent 目錄環境變數
 PI_CONFIG_ROOT = os.path.expanduser("~/.pi")
 AGENT_DIR = os.path.join(PI_CONFIG_ROOT, "agent")
@@ -202,15 +208,25 @@ def _extract_messages_from_jsonl(jsonl_path):
         pass
     return msgs
 
-def capture_session_to_stm(pi_dir, stm_dir):
+def capture_session_to_stm(pi_dir, stm_dir, force=False):
+    """Summarize today's JSONL sessions into a single STM markdown file.
+
+    Args:
+        force: if True, overwrite today's existing auto STM (used by watcher
+               for incremental updates).
+    """
     today = datetime.date.today().isoformat()
 
-    # Skip if agent already wrote an STM file today
+    # Skip if agent already wrote a manual STM file today (unless force=True).
+    # Manual files don't end with `_auto.md`; we never overwrite them.
     existing_today = [
         f for f in (os.listdir(stm_dir) if os.path.exists(stm_dir) else [])
         if f.endswith(".md") and f.startswith(today)
     ]
-    if existing_today:
+    manual_today = [f for f in existing_today if not f.endswith("_auto.md")]
+    if manual_today:
+        return
+    if existing_today and not force:
         return
 
     # Locate today's JSONL session files (pi CLI always creates these)
@@ -219,9 +235,6 @@ def capture_session_to_stm(pi_dir, stm_dir):
     if not os.path.exists(session_dir):
         return
 
-    import glob as _glob
-    today_files = sorted(_glob.glob(os.path.join(session_dir, f"{today.replace('-', '-')}T*.jsonl")))
-    # Use ISO date prefix: 2026-04-27 → files start with 2026-04-27T
     today_prefix = today + "T"
     today_files = sorted(
         f for f in os.listdir(session_dir)
@@ -258,15 +271,21 @@ def capture_session_to_stm(pi_dir, stm_dir):
         f"對話紀錄：\n{conversation_text}"
     )
     try:
+        # On Windows, `claude` is `claude.cmd`; resolve it explicitly so we
+        # can pass the multi-line prompt via stdin (avoids shell-quoting issues).
+        import shutil
+        claude_bin = shutil.which("claude") or shutil.which("claude.cmd") or "claude"
         result = subprocess.run(
-            ["claude", "-p", prompt],
+            [claude_bin, "-p"],
+            input=prompt,
             capture_output=True, text=True, encoding="utf-8",
-            cwd=pi_dir, timeout=120
+            cwd=pi_dir, timeout=120,
         )
         if result.returncode == 0 and result.stdout.strip():
             os.makedirs(stm_dir, exist_ok=True)
-            now_str = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M")
-            stm_file = os.path.join(stm_dir, f"{now_str}_auto.md")
+            # Stable filename per day so watcher overwrites instead of
+            # accumulating dozens of partial files.
+            stm_file = os.path.join(stm_dir, f"{today}_auto.md")
             with open(stm_file, "w", encoding="utf-8") as f:
                 f.write(result.stdout.strip())
             print(f"[小白報報] ✅ STM 自動摘要已寫入：{os.path.basename(stm_file)}")
@@ -274,6 +293,55 @@ def capture_session_to_stm(pi_dir, stm_dir):
             print(f"[小白報報] ⚠️ 自動摘要失敗（exit {result.returncode}）")
     except Exception as e:
         print(f"[小白報報] ⚠️ 自動生成 STM 摘要失敗：{e}")
+
+
+# ---------------------------------------------------------------------------
+# Background: STM watcher — every N seconds, if today's JSONL has new content,
+# regenerate the STM auto-summary. Prevents data loss on crash / forced kill.
+# ---------------------------------------------------------------------------
+
+def stm_watcher(pi_dir, stm_dir, interval=600):
+    """Re-run capture_session_to_stm whenever today's JSONL files change."""
+    slug = _cwd_to_session_slug(pi_dir)
+    session_dir = os.path.join(PI_CONFIG_ROOT, "agent", "sessions", slug)
+    sig_dir = os.path.join(pi_dir, ".pi")
+    os.makedirs(sig_dir, exist_ok=True)
+
+    while True:
+        time.sleep(interval)
+        try:
+            today = datetime.date.today().isoformat()
+            if not os.path.exists(session_dir):
+                continue
+            today_prefix = today + "T"
+            today_files = [
+                f for f in os.listdir(session_dir)
+                if f.startswith(today_prefix) and f.endswith(".jsonl")
+            ]
+            if not today_files:
+                continue
+            # Signature = sum of (mtime, size) of today's JSONL files.
+            sig_parts = []
+            for fname in today_files:
+                p = os.path.join(session_dir, fname)
+                st = os.stat(p)
+                sig_parts.append(f"{fname}:{int(st.st_mtime)}:{st.st_size}")
+            sig = "|".join(sorted(sig_parts))
+
+            sig_file = os.path.join(sig_dir, f"stm_watcher_{today}.sig")
+            prev_sig = ""
+            if os.path.exists(sig_file):
+                with open(sig_file, "r", encoding="utf-8") as f:
+                    prev_sig = f.read().strip()
+            if sig == prev_sig:
+                continue  # No new content since last check
+
+            print(f"\n[小白報報] 🔄 STM watcher：偵測到 JSONL 變化，更新今日摘要...")
+            capture_session_to_stm(pi_dir, stm_dir, force=True)
+            with open(sig_file, "w", encoding="utf-8") as f:
+                f.write(sig)
+        except Exception as e:
+            print(f"[小白報報] ⚠️ STM watcher 出錯：{e}")
 
 # ---------------------------------------------------------------------------
 # Build APPEND_SYSTEM.md: LTM + STM → project-level path (loaded by agent)
@@ -322,7 +390,6 @@ def rebuild_append_system(pi_dir, memory_dir, stm_dir, append_system_path):
 # ---------------------------------------------------------------------------
 
 if __name__ == "__main__":
-    print("[小白報報] 🐶 總司令腳本啟動！")
     pi_dir = os.path.dirname(os.path.abspath(__file__))
 
     memory_dir    = os.path.join(PI_CONFIG_ROOT, "memory")
@@ -330,6 +397,16 @@ if __name__ == "__main__":
     stm_state_file = os.path.join(pi_dir, ".pi", "stm_state.json")
     # resource-loader.ts checks {cwd}/.pi/APPEND_SYSTEM.md first
     append_system_path = os.path.join(pi_dir, ".pi", "APPEND_SYSTEM.md")
+
+    # --- CLI: --flush-stm-only ---
+    # Manually trigger STM capture without launching pi agent.
+    # Used by skill `stm_flush` and by user as `python pi_startup.py --flush-stm-only`.
+    if "--flush-stm-only" in sys.argv:
+        print("[小白報報] 🔄 手動 flush：彙整今日 JSONL → STM ...")
+        capture_session_to_stm(pi_dir, stm_dir, force=True)
+        sys.exit(0)
+
+    print("[小白報報] 🐶 總司令腳本啟動！")
 
     # --- startup checks ---
     check_pending_consolidation(stm_dir, stm_state_file)
@@ -353,6 +430,9 @@ if __name__ == "__main__":
 
     threading.Thread(target=auto_sync_github, daemon=True).start()
     threading.Thread(target=memory_summary_scheduler, args=(stm_dir, stm_state_file), daemon=True).start()
+    # STM watcher: every 10 min, regenerate today's STM if JSONL changed.
+    # Prevents data loss on crash / forced kill (no longer reliant on finally).
+    threading.Thread(target=stm_watcher, args=(pi_dir, stm_dir, 600), daemon=True).start()
 
     linkpi_process = None
     try:
