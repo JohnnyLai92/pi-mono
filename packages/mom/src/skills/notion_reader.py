@@ -120,6 +120,68 @@ class NotionSkill:
         except Exception as e:
             return {"error": f"Heartbeat update failed: {str(e)}"}
 
+    def create_quiz_page_structure(self, page_id: str, questions: List[str]):
+        """
+        Creates a structured quiz page with Toggle H4s and Callout blocks.
+        Implements robust retry logic and correct icon formatting to avoid 400 errors.
+        """
+        # 1. Add Header Blocks
+        header = [
+            {
+                "object": "block",
+                "type": "heading_2",
+                "heading_2": {"rich_text": [{"type": "text", "text": {"content": "📅 AI 應用規劃師中級模擬練習"}}] }
+            },
+            {
+                "object": "block",
+                "type": "paragraph",
+                "paragraph": {"rich_text": [{"type": "text", "text": {"content": "✏️ **填答指南**：展開 H4 題目 -> 在 ✏️ 區塊輸入答案 -> 告知小白批改。"}}] }
+            }
+        ]
+        self._session.patch(f"{self.base_url}/blocks/{page_id}/children", json={"children": header})
+
+        # 2. Add Questions with Nested Callouts
+        for q_text in questions:
+            # Create Toggle H4
+            payload_toggle = {
+                "children": [{
+                    "object": "block",
+                    "type": "heading_4",
+                    "heading_4": {"rich_text": [{"type": "text", "text": {"content": q_text}}], "is_toggleable": True}
+                }]
+            }
+            res = self._session.patch(f"{self.base_url}/blocks/{page_id}/children", json=payload_toggle)
+            res.raise_for_status()
+            toggle_id = res.json()["results"][0]["id"]
+            
+            # Robustly add Callouts with corrected icon structure
+            children_payload = {
+                "children": [
+                    {
+                        "object": "block",
+                        "type": "callout",
+                        "callout": {
+                            "icon": {"type": "emoji", "emoji": "✏️"},
+                            "rich_text": [{"type": "text", "text": {"content": "我的答案：\n(在此輸入內容)"}}]
+                        }
+                    },
+                    {
+                        "object": "block",
+                        "type": "callout",
+                        "callout": {
+                            "icon": {"type": "emoji", "emoji": "🤖"},
+                            "rich_text": [{"type": "text", "text": {"content": "批閱結果：(等待批閱...)"}}]
+                        }
+                    }
+                ]
+            }
+            # Retry loop for eventual consistency
+            for attempt in range(5):
+                child_res = self._session.patch(f"{self.base_url}/blocks/{toggle_id}/children", json=children_payload)
+                if child_res.status_code == 200:
+                    break
+                time.sleep(2 ** attempt)
+
     def get_unfinished_tasks(self) -> List[Dict[str, Any]]:
         """
         Retrieves unfinished tasks from the target database, filtered client-side.
