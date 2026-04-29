@@ -1,3 +1,8 @@
+---
+name: fix-linkpi-timeout 
+description: 當強尼在使用 VS Code (OpenCode) 透過 LinkPi 串接 LLM (如 Google Gemini) 時，若遇到第一次對話傳送大量上下文導致超過預設的 15 秒等待上限，就會引發 `TimeoutError`，進而造成 OpenCode 不斷重試並卡住。此技能會教小白如何將 `LinkPi.py` 中的等待上限從 15 秒延長至 60 秒，並重新啟動伺服器
+---
+
 # 修正 LinkPi 逾時錯誤 (TimeoutError)
 
 ## 描述

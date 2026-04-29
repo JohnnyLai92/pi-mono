@@ -90,6 +90,31 @@ class NotionSkill:
         except Exception as e:
             return [{"error": f"API Request failed: {str(e)}"}]
 
+    def append_text_to_page(self, page_id: str, text: str, block_type: str = "paragraph") -> Dict[str, Any]:
+        """
+        Appends a text block to a Notion page.
+        Supported block_types: 'paragraph', 'bulleted_list_item', 'heading_3'
+        """
+        if not self.token:
+            return {"error": "NOTION_TOKEN is not set."}
+        
+        url = f"{self.base_url}/blocks/{page_id}/children"
+        
+        block = {
+            "object": "block",
+            "type": block_type,
+            block_type: {
+                "rich_text": [{"type": "text", "text": {"content": text}}]
+            }
+        }
+        
+        try:
+            response = self._session.patch(url, json={"children": [block]}, timeout=self.DEFAULT_TIMEOUT)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return {"error": f"Append text failed: {str(e)}"}
+
     def update_heartbeat(self, page_id: str, timestamp: str):
         """
         Update the '說明' (Description) property of a specific page to record the heartbeat.
@@ -181,6 +206,67 @@ class NotionSkill:
                 if child_res.status_code == 200:
                     break
                 time.sleep(2 ** attempt)
+
+    def get_database_schema(self) -> Dict[str, Any]:
+        """
+        Retrieves the schema of the target database to identify property names.
+        """
+        if not self.token or not self.database_id:
+            return {"error": "Token or Database ID missing."}
+        
+        url = f"{self.base_url}/databases/{self.database_id}"
+        try:
+            response = self._session.get(url, timeout=self.DEFAULT_TIMEOUT)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return {"error": f"Schema retrieval failed: {str(e)}"}
+
+    def create_task(self, title: str, status: str = "未開始") -> Dict[str, Any]:
+        """
+        Creates a new task page in the target database by dynamically resolving property names.
+        """
+        if not self.token or not self.database_id:
+            return {"error": "Token or Database ID missing."}
+
+        schema = self.get_database_schema()
+        if "error" in schema:
+            return schema
+
+        properties = schema.get("properties", {})
+        title_prop = None
+        status_prop = None
+
+        for prop_name, prop_info in properties.items():
+            if prop_info.get("type") == "title":
+                title_prop = prop_name
+            elif prop_info.get("type") == "status":
+                status_prop = prop_name
+
+        if not title_prop:
+            return {"error": "Could not find title property in database."}
+
+        payload = {
+            "parent": {"database_id": self.database_id},
+            "properties": {
+                title_prop: {
+                    "title": [{"text": {"content": title}}]
+                }
+            }
+        }
+
+        if status_prop:
+            payload["properties"][status_prop] = {
+                "status": {"name": status}
+            }
+
+        url = f"{self.base_url}/pages"
+        try:
+            response = self._session.post(url, json=payload, timeout=self.DEFAULT_TIMEOUT)
+            response.raise_for_status()
+            return response.json()
+        except Exception as e:
+            return {"error": f"Task creation failed: {str(e)}"}
 
     def get_unfinished_tasks(self) -> List[Dict[str, Any]]:
         """

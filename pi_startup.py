@@ -6,6 +6,11 @@ import datetime
 import sys
 import json
 
+try:
+    import schedule
+except ImportError:
+    schedule = None
+
 # Ensure UTF-8 output on Windows (prevents UnicodeEncodeError with emoji/CJK)
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -296,6 +301,51 @@ def capture_session_to_stm(pi_dir, stm_dir, force=False):
 
 
 # ---------------------------------------------------------------------------
+# Background: question index scheduler — periodically refresh the question
+# index and Markdown report so we don't need Windows Task Scheduler.
+# ---------------------------------------------------------------------------
+
+def _run_question_index_job(pi_dir):
+    extract_path = os.path.join(pi_dir, "scripts", "extract_questions.py")
+    report_path = os.path.join(pi_dir, "scripts", "generate_question_report.py")
+    log_path = os.path.join(pi_dir, "scheduler_output.log")
+
+    def _exec(script):
+        if not os.path.exists(script):
+            return
+        try:
+            with open(log_path, "a", encoding="utf-8") as logf:
+                logf.write(f"\n[{datetime.datetime.now().isoformat()}] running {os.path.basename(script)}\n")
+                subprocess.run(
+                    [sys.executable, script],
+                    stdout=logf, stderr=logf, cwd=pi_dir, timeout=600,
+                )
+        except Exception as e:
+            print(f"[小白報報] ⚠️ 排程任務 {os.path.basename(script)} 失敗：{e}")
+
+    print(f"[小白報報] 🔄 排程觸發：更新題庫索引與報告 ({datetime.datetime.now().strftime('%H:%M:%S')})")
+    _exec(extract_path)
+    _exec(report_path)
+
+
+def question_index_scheduler(pi_dir, interval_hours=1):
+    """每隔 interval_hours 小時執行 extract_questions + generate_question_report。"""
+    if schedule is None:
+        print("[小白報報] ⚠️ 未安裝 schedule 套件，題庫排程停用。請執行：pip install schedule")
+        return
+
+    schedule.every(interval_hours).hours.do(_run_question_index_job, pi_dir=pi_dir)
+    # 啟動後 30 秒先跑一次，確保開機即有最新報告
+    threading.Timer(30, _run_question_index_job, args=(pi_dir,)).start()
+
+    while True:
+        try:
+            schedule.run_pending()
+        except Exception as e:
+            print(f"[小白報報] ⚠️ 排程器出錯：{e}")
+        time.sleep(30)
+
+# ---------------------------------------------------------------------------
 # Background: STM watcher — every N seconds, if today's JSONL has new content,
 # regenerate the STM auto-summary. Prevents data loss on crash / forced kill.
 # ---------------------------------------------------------------------------
@@ -411,40 +461,13 @@ if __name__ == "__main__":
     # --- startup checks ---
     check_pending_consolidation(stm_dir, stm_state_file)
 
-    meridian_process = None
-    try:
-        answer = input("[小白報報] 🔌 是否啟動 Meridian proxy？(y/N) ").strip().lower()
-    except: answer = "n"
-    if answer == "y":
-        add_meridian_to_models_json()
-        try:
-            meridian_process = subprocess.Popen(
-                ["meridian"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                env={**os.environ,
-                     "CLAUDE_CONFIG_DIR": os.path.expanduser("~/.config/meridian"),
-                     "MERIDIAN_DEFAULT_AGENT": "pi",
-                     "CLAUDE_PROXY_PASSTHROUGH": "true"}
-            )
-        except: pass
-
     threading.Thread(target=auto_sync_github, daemon=True).start()
     threading.Thread(target=memory_summary_scheduler, args=(stm_dir, stm_state_file), daemon=True).start()
     # STM watcher: every 10 min, regenerate today's STM if JSONL changed.
     # Prevents data loss on crash / forced kill (no longer reliant on finally).
     threading.Thread(target=stm_watcher, args=(pi_dir, stm_dir, 600), daemon=True).start()
-
-    linkpi_process = None
-    try:
-        linkpi_answer = input("[小白報報] 🔌 是否啟動 LinkPi 伺服器 (port 8765)？(y/N) ").strip().lower()
-    except: linkpi_answer = "n"
-    if linkpi_answer == "y":
-        try:
-            linkpi_process = subprocess.Popen(
-                [sys.executable, "LinkPi.py", "--host", "0.0.0.0"],
-                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, cwd=pi_dir
-            )
-        except: pass
+    # 題庫索引/報告排程：每小時更新一次（取代 Windows Task Scheduler）
+    threading.Thread(target=question_index_scheduler, args=(pi_dir, 1), daemon=True).start()
 
     scheduler_process = None
     if os.path.exists(os.path.join(pi_dir, "pi_scheduler.py")):
@@ -475,7 +498,4 @@ if __name__ == "__main__":
         capture_session_to_stm(pi_dir, stm_dir)
         # Rebuild context with fresh STM so next startup is up-to-date
         rebuild_append_system(pi_dir, memory_dir, stm_dir, append_system_path)
-        if linkpi_process: linkpi_process.terminate()
         if scheduler_process: scheduler_process.terminate()
-        if meridian_process: meridian_process.terminate()
-        remove_meridian_from_models_json()
