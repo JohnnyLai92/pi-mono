@@ -1,3 +1,8 @@
+---
+name: start_linkpi
+description: 啟動 LinkPi 伺服器，綁定 0.0.0.0:8765，提供 LLM API 橋接功能。
+---
+
 # 啟動 LinkPi 伺服器
 
 ## 描述
