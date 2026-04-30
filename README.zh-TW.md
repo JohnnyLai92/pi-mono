@@ -96,6 +96,94 @@ POST /v1/consolidate
   請其彙整為單一統一記憶文件 → 取代 memory.md
 ```
 
+### 記憶架構總覽
+
+以下為 Pi Agent 的 **STM（短期記憶）→ LTM（長期記憶）→ 最高準則（CRITICAL_RULES.md）** 三層架構關係圖：
+
+```mermaid
+flowchart TD
+    subgraph RULES["🔒 最高準則 CRITICAL_RULES.md"]
+        RULE01["RULE-01\n同題 2 次失敗 → 問 Claude"]
+        RULE02["RULE-02\n一律繁體中文"]
+        RULE03["RULE-03\n誠實回應 / P0~P3 分級\nBLUF / 證據義務 / 停機"]
+        RULE04["RULE-04\n指令＋時間戳＋原始 stdout"]
+    end
+
+    subgraph LTM["📚 長期記憶 LTM"]
+        subgraph PERSONAL["個人資訊"]
+            LTM_PROFILE["profile.md\n角色、習慣、準則"]
+            LTM_PREFS["preferences.md\n全局偏好"]
+        end
+
+        subgraph TECH["技術規則"]
+            LTM_NOTION["notion_integration.md\nNotion API 整合"]
+            LTM_STARTUP["startup_manager.md\n開機啟動與排程"]
+        end
+
+        subgraph AUTO["自動化任務"]
+            LTM_GITHUB["github_auto_sync.md\nGitHub 同步"]
+            LTM_FINANCE["finance_news.md\n財經新聞推播"]
+            LTM_WATER["water_and_english.md\n喝水 / 英文"]
+            LTM_SKILL_EXCEL["skill_excel_processing.md\nExcel 技能"]
+        end
+
+        subgraph TRAINING["考試準備"]
+            LTM_ISO["iso27001_lac_training.md\nISO 27001 LAC"]
+            LTM_AIPLANNER["ai_planner_certification_training.md\nAI 應用規劃師"]
+        end
+    end
+
+    subgraph STM["⏱ 短期記憶 STM"]
+        SESSION["session.jsonl\n~/.pi/agent/sessions/{slug}/\n原始對話紀錄"]
+        STM_FILE["YYYY-MM-DD_auto.md\n~/.pi/short_term_memory/\n每日摘要"]
+    end
+
+    subgraph SHARED["🔗 跨 Agent 共享"]
+        LINKPI_MEM["~/.linkpi/memory.md\nLinkPi 跨供應商交接"]
+    end
+
+    %% 核心流程
+    SESSION -. 10 分鐘 .-> STM_FILE
+    STM_FILE -. 17:00 / 人工確認 .-> SESSION
+    SESSION -. 每次啟動 .-> SESSION
+    SESSION -. 供應商切換 .-> LINKPI_MEM
+    LINKPI_MEM -. 新 session .-> SESSION
+
+    RULE01 -. 強制 .-> SESSION
+    RULE02 -. 強制 .-> SESSION
+    RULE03 -. 強制 .-> SESSION
+    RULE04 -. 強制 .-> SESSION
+
+    %% 樣式
+    class RULES fill:#ff0000,color:#fff,stroke:#ff0000,stroke-width:2px
+    class LTM fill:#f9f,stroke:#f0f,stroke-width:2px
+    class STM fill:#bbf,stroke:#00f,stroke-width:2px
+    class SHARED fill:#ff9,color:#000,stroke:#fc0,stroke-width:2px
+    class PERSONAL,TECH,AUTO,TRAINING fill:#ffc,stroke:#fa0,stroke-width:1px
+```
+
+### 架構說明
+
+| 層級 | 儲存位置 | 說明 |
+|------|----------|------|
+| **最高準則** | `CRITICAL_RULES.md` | 行為準則，強制所有 Agent 遵守 |
+| **LTM** | `~/.pi/memory/*.md` | 長期規則與知識（10 個檔案，分 4 類） |
+| **STM** | `~/.pi/agent/sessions/` | 每次 pi session 的原始對話（JSONL） |
+| **跨 Agent** | `~/.linkpi/memory.md` | LinkPi 跨供應商交接摘要 |
+
+### 記憶生命週期
+
+```
+session.jsonl ──> STM 摘要 ──> 17:00 鞏固 ──> 強尼確認 ──> LTM
+  ↑                                                     ↓
+  └─────── 每次啟動自動注入 APPEND_SYSTEM.md ←──────────┘
+```
+
+**關鍵規則：**
+- STM → LTM 需強尼確認，衝突人工覆寫
+- 每次 pi 啟動合併 STM+LTM 注入 `APPEND_SYSTEM.md`
+- `CRITICAL_RULES.md` 對所有層級具最高優先級
+
 ### 安裝設定
 
 #### 1. 安裝 Python 依賴套件
