@@ -166,3 +166,7 @@ export {
 	isWriteToolResult,
 } from "./types.js";
 export { wrapRegisteredTool, wrapRegisteredTools } from "./wrapper.js";
+
+// Legacy compat: defineTool was removed from public API but some extensions
+// still reference it. Re-export as a no-op to avoid "is not a function" errors.
+export { defineTool } from "./defineTool.js";

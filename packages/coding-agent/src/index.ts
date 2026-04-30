@@ -216,6 +216,8 @@ export {
 	type SkillFrontmatter,
 } from "./core/skills.js";
 export { createSyntheticSourceInfo } from "./core/source-info.js";
+// Legacy compat
+export { defineTool } from "./core/extensions/index.js";
 // Tools
 export {
 	type BashOperations,

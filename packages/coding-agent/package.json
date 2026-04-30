@@ -20,6 +20,10 @@
 		"./hooks": {
 			"types": "./dist/core/hooks/index.d.ts",
 			"import": "./dist/core/hooks/index.js"
+		},
+		"./defineTool": {
+			"types": "./dist/core/extensions/defineTool.d.ts",
+			"import": "./dist/core/extensions/defineTool.js"
 		}
 	},
 	"files": [
